@@ -98,7 +98,7 @@ class InvoiceSource(StrEnum):
 
 
 class InvoiceStatus(StrEnum):
-    """發票狀態。前端 constants/invoice.js 的值必須與此一致。"""
+    """發票狀態。前台 / 後台 app/constants.py 的顯示文字對照必須涵蓋所有值。"""
 
     PENDING = "pending"  # 待分析
     ANALYZING = "analyzing"  # AI 分析中

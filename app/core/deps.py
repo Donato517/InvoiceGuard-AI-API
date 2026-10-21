@@ -18,4 +18,3 @@ from app.db.session import get_db
 DbSession = Annotated[Session, Depends(get_db)]
 
 # TODO(JerryChien): CurrentUser = Annotated[User, Depends(get_current_user)]（解析 JWT 取得登入者）
-# TODO(JerryChien): AdminUser = Annotated[User, Depends(require_admin)]（後台 API 權限檢查）

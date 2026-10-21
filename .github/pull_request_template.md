@@ -23,7 +23,8 @@
 - [ ] 程式碼備註符合 `docs/CODING_CONVENTIONS.md`
 - [ ] `ruff check .` 與 `pytest` 通過
 - [ ] 異動 Model 時：已同步更新 Schema 備註、異動紀錄、migration、`app/db/README.md`
+- [ ] 異動後台會用到的資料表時：已通知 InvoiceGuard-AI-ADMIN 同步 Model
 - [ ] 新增環境變數時：已更新 `.env.example` 與 `app/core/config.py`
 - [ ] 新增 / 修改排程時：已更新 `vercel.json` 與 `docs/ARCHITECTURE.md`
-- [ ] API 格式變更時：已通知前台 / 後台並更新 `docs/API_CONVENTIONS.md`
+- [ ] API 格式變更時：已通知前台並更新 `docs/API_CONVENTIONS.md`
 - [ ] 沒有提交任何密碼、金鑰、`.env` 檔

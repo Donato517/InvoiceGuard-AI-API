@@ -39,9 +39,6 @@ class Settings(BaseSettings):
     JWT_EXPIRE_MINUTES: int = 60
     CRON_SECRET: str = ""
 
-    # ---- CORS ----
-    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:5174"]
-
     # ---- 外部服務 ----
     AI_API_KEY: str = ""
     EINVOICE_APP_ID: str = ""

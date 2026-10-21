@@ -6,10 +6,10 @@
     - Vercel 會自動偵測本檔的 `app` 物件作為 Serverless Function 進入點，
       函式設定（maxDuration 等）見 vercel.json → functions["app/main.py"]。
     - 本檔只做「組裝」，不放任何業務邏輯。
+    - 呼叫端為前台網站的伺服器（server to server），瀏覽器不直接呼叫本 API，因此不設定 CORS。
 """
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
@@ -26,15 +26,6 @@ app = FastAPI(
     docs_url="/docs" if settings.DEBUG else None,
     redoc_url=None,
     openapi_url="/openapi.json" if settings.DEBUG else None,
-)
-
-# ---- Middleware ----
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
 )
 
 # ---- 例外處理 ----
