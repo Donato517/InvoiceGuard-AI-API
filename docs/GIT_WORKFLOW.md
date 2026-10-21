@@ -61,15 +61,14 @@ docs: 補充排程規則說明
 
 ## 4. 跨專案異動
 
-API 格式變更會同時影響前台與後台：
-
-1. 先在 API 專案完成並合併（保持向下相容）
-2. 再分別修改前台 / 後台，PR 說明中註明相依的 API PR
-3. 不相容變更需依 `docs/API_CONVENTIONS.md`（API 專案）升版
+| 異動類型 | 影響 | 順序 |
+|---|---|---|
+| API 回應格式 | 前台 | 1. API 專案完成並合併（保持向下相容）<br>2. 前台調整，PR 說明註明相依的 API PR<br>3. 不相容變更依 API 專案 `docs/API_CONVENTIONS.md` 升版 |
+| 資料表結構 | 後台 | 1. API 專案修改 Model + migration，合併後執行 migration<br>2. 後台同步 `app/db/models/` 對應檔案<br>（詳見 API 專案 `app/db/README.md` 第 9 節） |
 
 ## 5. 禁止事項
 
 - 提交 `.env`、金鑰、密碼、個資或真實發票資料
-- 提交 `node_modules/`、`dist/`、`.venv/`、`tmp/` 內容
+- 提交 `.venv/`、`__pycache__/`、`tmp/` 內容
 - 對 `main` / `develop` 使用 `git push --force`
 - 修改已合併的 migration 版本檔（API 專案）

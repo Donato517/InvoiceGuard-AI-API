@@ -1,15 +1,15 @@
 # API 設計規範 — InvoiceGuard-AI-API
 
-> 前台（InvoiceGuard-AI）與後台（InvoiceGuard-AI-ADMIN）都依此規範串接。修改格式前需先通知前端。
+> 前台網站（InvoiceGuard-AI）在**伺服器端**依此規範呼叫 API；瀏覽器不直接呼叫 API。
+> 後台（InvoiceGuard-AI-ADMIN）以自有 DB 模組直接存取資料庫，不經過 API。修改格式前需先通知前台。
 
 ## 1. 路徑規劃
 
 | 前綴 | 用途 | 呼叫者 | 驗證 |
 |---|---|---|---|
 | `/health` | 健康檢查 | 監控 / 部署驗證 | 無 |
-| `/api/v1/auth/*` | 登入 / 登出 / 目前使用者 | 前台、後台 | 部分需登入 |
-| `/api/v1/*` | 前台功能（只能存取自己的資料） | 前台 | Bearer token |
-| `/api/v1/admin/*` | 後台功能 | 後台 | Bearer token + 管理員角色 |
+| `/api/v1/auth/*` | 登入 / 登出 / 目前使用者 | 前台伺服器 | 部分需登入 |
+| `/api/v1/*` | 前台功能（只能存取自己的資料） | 前台伺服器 | Bearer token |
 | `/api/cron/*` | 排程觸發（不公開、不列入文件） | Vercel Cron | `CRON_SECRET` |
 
 ## 2. URL 命名
@@ -49,11 +49,11 @@
 | 項目 | 規則 | 範例 |
 |---|---|---|
 | 編碼 | UTF-8 JSON | |
-| 欄位命名 | **snake_case**（前端直接使用，不轉 camelCase） | `invoice_number` |
+| 欄位命名 | **snake_case**（與 Python 命名一致，前台直接使用） | `invoice_number` |
 | 時間 | ISO 8601，含時區，以 UTC 回傳 | `"2026-10-21T02:00:00Z"` |
 | 日期 | `YYYY-MM-DD` | `"2026-10-21"` |
-| 金額 | **字串**（避免浮點誤差），前端顯示時再格式化 | `"1234.50"` |
-| 列舉 | 小寫英文代碼，前端自行對應中文 | `"flagged"` |
+| 金額 | **字串**（避免浮點誤差），前台顯示時再格式化 | `"1234.50"` |
+| 列舉 | 小寫英文代碼，前台自行對應中文 | `"flagged"` |
 | 空值 | 回傳 `null`，不省略欄位 | `"tax_amount": null` |
 
 ## 5. 回應格式
@@ -120,8 +120,9 @@
 
 ## 7. 驗證
 
-- 前台 / 後台在 `Authorization` 標頭帶 `Bearer <access_token>`
-- token 過期回 `401`，前端清除登入狀態並導向登入頁
+- 前台伺服器在 `Authorization` 標頭帶 `Bearer <access_token>`
+- access token 由前台存在使用者瀏覽器的 **httpOnly cookie**，瀏覽器端 JavaScript 讀不到
+- token 過期回 `401`，前台清除 cookie 並導向登入頁
 
 ## 8. 版本管理
 

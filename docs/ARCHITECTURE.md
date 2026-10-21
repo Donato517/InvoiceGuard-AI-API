@@ -2,7 +2,7 @@
 
 ## 1. 系統全貌
 
-InvoiceGuard AI 由三個獨立的 Git repository 組成，各自部署為一個 Vercel Project：
+InvoiceGuard AI 由三個獨立的 Git repository 組成，**全部以 Python 撰寫**，各自部署為一個 Vercel Python Function：
 
 ```
       User                              Admin
@@ -10,30 +10,33 @@ InvoiceGuard AI 由三個獨立的 Git repository 組成，各自部署為一個
        v                                  v
 ┌──────────────────────┐        ┌──────────────────────────┐
 │ InvoiceGuard-AI      │        │ InvoiceGuard-AI-ADMIN    │
-│ Vue 3 + Vite (SPA)   │        │ Vue 3 + Vite (SPA)       │
-│ Vercel Static        │        │ Vercel Static            │
+│ FastAPI + Jinja2     │        │ FastAPI + Jinja2         │
+│ Vercel Function (Py) │        │ Vercel Function (Py)     │
 └──────────┬───────────┘        └─────────────┬────────────┘
-           │ /api/v1/*                        │ /api/v1/admin/*
-           └────────────────┬─────────────────┘
-                            ▼  HTTPS + JSON (Bearer token)
-             ┌──────────────────────────────┐
-             │ InvoiceGuard-AI-API          │◀──── Vercel Cron
-             │ Python FastAPI               │      GET /api/cron/*
-             │ Vercel Function (Python)     │
-             └───┬──────────┬──────────┬────┘
-                 │          │          │
-                 ▼          ▼          ▼
-            PostgreSQL  AI Model   MOF e-Invoice
-            (Neon)      Service    API
+           │ HTTPS + JSON (server side)       │
+           ▼                                  │
+┌──────────────────────┐                      │ SQL
+│ InvoiceGuard-AI-API  │◀── Vercel Cron       │ (own DB module)
+│ FastAPI              │                      │
+│ Vercel Function (Py) │──▶ AI Model          │
+└──────────┬───────────┘──▶ MOF e-Invoice API │
+           │ SQL                              │
+           ▼                                  │
+┌──────────────────────┐                      │
+│ PostgreSQL (Neon)    │◀─────────────────────┘
+└──────────────────────┘
 ```
 
-| Repository | 角色 | 技術 | 部署 |
+| Repository | 角色 | 技術 | 資料存取 |
 |---|---|---|---|
-| InvoiceGuard-AI | 前台：使用者上傳發票、查看 AI 分析結果 | Vue 3 + Vite | Vercel 靜態網站 |
-| InvoiceGuard-AI-ADMIN | 後台：發票審核、使用者管理、排程與稽核紀錄 | Vue 3 + Vite | Vercel 靜態網站 |
-| **InvoiceGuard-AI-API**（本專案） | 後端：REST API、AI 分析、第三方串接、排程 | Python FastAPI | Vercel Python Function |
+| InvoiceGuard-AI | 前台網站：使用者上傳發票、查看 AI 分析結果 | FastAPI + Jinja2 | 由伺服器端呼叫本 API，不直接連資料庫 |
+| InvoiceGuard-AI-ADMIN | 後台網站：發票審核、使用者管理、排程與稽核紀錄 | FastAPI + Jinja2 | 自有 DB 模組，直接連同一個 PostgreSQL |
+| **InvoiceGuard-AI-API**（本專案） | 後端 API：AI 分析、第三方串接、排程 | FastAPI | 自有 DB 模組 + Alembic |
 
 外部服務：PostgreSQL（Neon）、AI 模型服務、財政部電子發票整合服務平台（MOF e-Invoice）、檔案儲存（Vercel Blob）。
+
+**資料庫共用規則**：後台直接存取同一個資料庫，但**資料表結構只能由本專案的 Alembic migration 變更**；
+後台的 Model 是對應定義，需同步更新。流程見 [`app/db/README.md` 第 9 節](../app/db/README.md#9-共用此資料庫的專案)。
 
 ---
 
@@ -82,11 +85,7 @@ InvoiceGuard-AI-API/
 │   │   ├── cron.py               #   GET /api/cron/*（僅供 Vercel Cron）
 │   │   └── v1/                   #   /api/v1/*
 │   │       ├── auth.py           #     登入 / 登出 / 目前使用者
-│   │       ├── invoices.py       #     前台發票
-│   │       └── admin/            #     /api/v1/admin/*（後台專用，需管理員權限）
-│   │           ├── users.py      #       使用者管理
-│   │           ├── invoices.py   #       發票審核
-│   │           └── system.py     #       排程紀錄 / 稽核紀錄
+│   │       └── invoices.py       #     前台發票
 │   ├── schemas/                  # Pydantic 請求 / 回應模型（DTO）
 │   │   └── common.py             #   分頁、錯誤格式
 │   ├── services/                 # 商業邏輯層
@@ -204,7 +203,6 @@ Vercel Function 的檔案系統**只有 `/tmp` 可寫入**，且執行個體結�
 | `DATABASE_URL_UNPOOLED` | PostgreSQL 直連字串（Alembic 使用） | migration 時 |
 | `JWT_SECRET_KEY` / `JWT_EXPIRE_MINUTES` | 登入 token 簽章金鑰 / 有效分鐘數 | ✓ |
 | `CRON_SECRET` | Vercel Cron 驗證密鑰（至少 16 字元） | ✓ |
-| `CORS_ORIGINS` | 允許的前端網址（JSON 陣列） | ✓ |
 | `AI_API_KEY` | AI 模型服務金鑰 | ✓ |
 | `EINVOICE_APP_ID` / `EINVOICE_API_KEY` | 財政部電子發票平台憑證 | ✓ |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob 存取權杖 | ✓ |

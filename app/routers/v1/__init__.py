@@ -8,9 +8,7 @@
 from fastapi import APIRouter
 
 from app.routers.v1 import auth, invoices
-from app.routers.v1.admin import router as admin_router
 
 api_router = APIRouter()
 api_router.include_router(auth.router)
 api_router.include_router(invoices.router)
-api_router.include_router(admin_router)

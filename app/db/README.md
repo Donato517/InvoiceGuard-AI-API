@@ -161,4 +161,25 @@ alembic downgrade -1 && alembic upgrade head
 | Session | 每個請求一個（`DbSession` 相依注入），不可放在全域變數共用 |
 | 交易 | 由 service 層 `commit` / `rollback`；repository 只做 `add` / `flush` / 查詢 |
 | 長時間作業 | 不要在交易中呼叫 AI 等外部服務；先查資料、關閉交易，呼叫完再開新交易寫回 |
-| 時區 | 資料庫一律存 UTC；顯示為台灣時間由前端或 `app/utils/datetime_utils.py` 轉換 |
+| 時區 | 資料庫一律存 UTC；顯示為台灣時間由網站或 `app/utils/datetime_utils.py` 轉換 |
+
+---
+
+## 9. 共用此資料庫的專案
+
+| 專案 | 存取方式 | 可否變更資料表結構 |
+|---|---|---|
+| **InvoiceGuard-AI-API**（本專案） | 自有 DB 模組（SQLAlchemy）+ Alembic | ✓ **唯一**可以產生 migration 的專案 |
+| InvoiceGuard-AI-ADMIN | 自有 DB 模組（SQLAlchemy），直接讀寫 | ✗ 只同步 Model 定義，不產生 migration |
+| InvoiceGuard-AI | 不連資料庫，透過本 API | ✗ |
+
+**結構異動流程：**
+
+1. 本專案修改 `models/*.py` 並產生 migration，PR 合併後執行 `alembic upgrade head`
+2. 後台同步修改 `app/db/models/` 對應檔案：ORM 定義、Schema 備註、異動紀錄（註明本專案的 revision id）
+3. 部署順序：**migration → API → 後台**
+
+**向下相容原則**（兩個專案不會同時部署）：
+
+- 新增欄位：先加為 nullable 或有預設值，後台更新前也不會出錯
+- 刪除 / 改名欄位：先讓後台停止使用並部署，再由本專案 migration 移除
