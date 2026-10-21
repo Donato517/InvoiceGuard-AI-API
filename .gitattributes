@@ -1,0 +1,11 @@
+# 統一使用 LF 換行，避免 Windows / macOS 協作時整份檔案被標記為變更
+* text=auto eol=lf
+
+# 二進位檔不做換行轉換
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary

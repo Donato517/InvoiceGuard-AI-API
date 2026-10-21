@@ -1,0 +1,17 @@
+# Ruff：程式碼檢查（lint）與格式化（format），取代 flake8 / isort / black
+# 使用：ruff check . 、 ruff format .
+line-length = 100
+target-version = "py312"
+extend-exclude = ["app/db/migrations/versions"]
+
+[lint]
+# E/W：PEP 8、F：錯誤偵測、I：import 排序、B：常見 bug、UP：新語法、N：命名、SIM：簡化
+select = ["E", "W", "F", "I", "B", "UP", "N", "SIM"]
+# E501：中文備註寬度計算與英文不同，行長交給 formatter 處理
+ignore = ["E501"]
+
+[lint.isort]
+known-first-party = ["app", "scripts"]
+
+[format]
+quote-style = "double"

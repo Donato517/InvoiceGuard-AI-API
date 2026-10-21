@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "app/main.py": {
+      "maxDuration": 60,
+      "excludeFiles": "{tests/**,docs/**,scripts/**,tmp/**}"
+    }
+  },
+  "crons": [
+    { "path": "/api/cron/sync-einvoice", "schedule": "0 18 * * *" },
+    { "path": "/api/cron/daily-risk-scan", "schedule": "0 19 * * *" }
+  ]
+}
