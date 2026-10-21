@@ -1,0 +1,30 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---- 環境變數（只提交 .env.example）----
+.env
+.env.*
+!.env.example
+
+# ---- 暫存 / 日誌（tmp/ 只保留 .gitkeep）----
+tmp/*
+!tmp/.gitkeep
+*.log
+
+# ---- Vercel ----
+.vercel/
+
+# ---- IDE / OS ----
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
