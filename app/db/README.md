@@ -4,6 +4,12 @@
 > 每張資料表的完整 Schema 寫在 `models/*.py` 的**檔案開頭備註**，ORM 定義緊接在下方，
 > 所有結構異動都透過 `migrations/` 版本化。不另外維護會與程式脫節的 Excel / Word 規格書。
 
+本次第一階段僅增加 `contracts.py` 型別契約及 `session.py` 設定保護，未改 ORM、migration 或資料表。
+Engine 延遲建立且每次先驗證雲端限制；本機直接建立 Engine 會被阻擋。
+Alembic（`migrations/env.py`）不經此阻擋，只由管理者在受控環境執行，但同樣以 `resolve_ssl_mode()` 強制 TLS。
+transaction pooler 模式停用 prepared statements；實際連線與權限尚未測試。
+見 [MODULE_CONTRACT.md](../../docs/MODULE_CONTRACT.md)。
+
 ---
 
 ## 1. 目錄說明

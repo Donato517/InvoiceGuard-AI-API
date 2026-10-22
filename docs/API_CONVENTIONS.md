@@ -3,6 +3,12 @@
 > 前台網站（InvoiceGuard-AI）在**伺服器端**依此規範呼叫 API；瀏覽器不直接呼叫 API。
 > 後台（InvoiceGuard-AI-ADMIN）以自有 DB 模組直接存取資料庫，不經過 API。修改格式前需先通知前台。
 
+第一階段僅提供設定與 Python 契約；此文件中的業務路徑、JWT 與完整 CRUD 是目標設計，
+不是已完成或已部署的功能。現有 `/health` 與 Cron 驗證保留。
+422 details 只回傳 loc / type / 固定 msg，不回傳原始 input / ctx，避免反射密碼或 Token。
+Python `DeleteResult` 是內部服務結果，未來 HTTP DELETE 仍依本文件回 204，不直接改為 JSON 回應。
+分頁 items 在 Python 契約中採不可變 tuple，JSON 仍為陣列；錯誤回應外層格式保持不變。
+
 ## 1. 路徑規劃
 
 | 前綴 | 用途 | 呼叫者 | 驗證 |

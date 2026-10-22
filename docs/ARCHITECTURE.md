@@ -23,7 +23,7 @@ InvoiceGuard AI 由三個獨立的 Git repository 組成，**全部以 Python �
            │ SQL                              │
            ▼                                  │
 ┌──────────────────────┐                      │
-│ PostgreSQL (Neon)    │◀─────────────────────┘
+│ PostgreSQL           │◀─────────────────────┘
 └──────────────────────┘
 ```
 
@@ -33,7 +33,9 @@ InvoiceGuard AI 由三個獨立的 Git repository 組成，**全部以 Python �
 | InvoiceGuard-AI-ADMIN | 後台網站：發票審核、使用者管理、排程與稽核紀錄 | FastAPI + Jinja2 | 自有 DB 模組，直接連同一個 PostgreSQL |
 | **InvoiceGuard-AI-API**（本專案） | 後端 API：AI 分析、第三方串接、排程 | FastAPI | 自有 DB 模組 + Alembic |
 
-外部服務：PostgreSQL（Neon）、AI 模型服務、財政部電子發票整合服務平台（MOF e-Invoice）、檔案儲存（Vercel Blob）。
+外部服務規劃：PostgreSQL、AI 模型服務、財政部電子發票整合服務平台（MOF e-Invoice）。
+原有 Vercel Blob 只是 TODO 骨架；新 Storage 契約規劃先接 Supabase，實際 adapter 尚未實作。
+保留原有 Blob 設定名稱，不代表已經執行供應商遷移或部署。
 
 **資料庫共用規則**：後台直接存取同一個資料庫，但**資料表結構只能由本專案的 Alembic migration 變更**；
 後台的 Model 是對應定義，需同步更新。流程見 [`app/db/README.md` 第 9 節](../app/db/README.md#9-共用此資料庫的專案)。
@@ -124,6 +126,9 @@ InvoiceGuard-AI-API/
 
 ## 4. 請求處理流程（範例：上傳發票）
 
+以下為目標設計。第一階段只完成設定與契約；JWT 登入、CRUD、Storage 與一般使用者授權仍待實作。
+現有排程工作及 runner 也包含 TODO；測試以替身驗證 Cron 驗證，不執行同步。
+
 ```
 POST /api/v1/invoices/upload
   │
@@ -183,7 +188,7 @@ Vercel Function 的檔案系統**只有 `/tmp` 可寫入**，且執行個體結�
 | 類型 | 本機 | Vercel | 規則 |
 |---|---|---|---|
 | 處理中暫存檔（PDF 解析、影像轉檔） | `tmp/` | `/tmp/invoiceguard` | 一律用 `app.utils.file_utils.temp_file_path()`，離開區塊自動刪除 |
-| 使用者上傳的原始檔 | Vercel Blob | Vercel Blob | 永久保存，資料庫只存 `file_key` |
+| 使用者上傳的原始檔 | 未來經授權呼叫 API 自己的雲端服務 | 規劃 Supabase Storage；adapter 尚未實作 | `file_key` 是現有欄位；獨立 metadata 表待另行規劃 |
 | 日誌 | console | Vercel Runtime Logs | 不寫入檔案 |
 | 測試 / 除錯輸出 | `tmp/` | — | `tmp/` 已列入 `.gitignore`，只保留 `.gitkeep` |
 
@@ -195,17 +200,26 @@ Vercel Function 的檔案系統**只有 `/tmp` 可寫入**，且執行個體結�
 
 完整範本見 [`.env.example`](../.env.example)，讀取統一透過 `app/core/config.py`。
 
+目前預設不讀 `.env`；下列機密只在雲端使用，不交付一般開發者。
+本機經 `app.db.session` 直接 DB 連線會被阻擋（Alembic migration 例外，但同樣強制 TLS）；`APP_ENV=local` 不跳過既有 Cron 驗證。
+完整能力別驗證與未完成項目見 [MODULE_CONTRACT.md](MODULE_CONTRACT.md)。
+
 | 變數 | 說明 | 必填 |
 |---|---|---|
-| `APP_ENV` | `local` / `preview` / `production` | ✓ |
+| `APP_ENV` | `local` / `preview` / `production`；Vercel 不會自動設定，必須明確設為 preview / production，否則 Cron 一律 401（日誌記錄欄位與代碼） | ✓ |
 | `DEBUG` | `true` 時開放 `/docs`；正式環境必須為 `false` | |
 | `DATABASE_URL` | PostgreSQL pooled 連線字串（應用程式使用） | ✓ |
 | `DATABASE_URL_UNPOOLED` | PostgreSQL 直連字串（Alembic 使用） | migration 時 |
 | `JWT_SECRET_KEY` / `JWT_EXPIRE_MINUTES` | 登入 token 簽章金鑰 / 有效分鐘數 | ✓ |
 | `CRON_SECRET` | Vercel Cron 驗證密鑰（至少 16 字元） | ✓ |
-| `AI_API_KEY` | AI 模型服務金鑰 | ✓ |
-| `EINVOICE_APP_ID` / `EINVOICE_API_KEY` | 財政部電子發票平台憑證 | ✓ |
-| `BLOB_READ_WRITE_TOKEN` | Vercel Blob 存取權杖 | ✓ |
+| `AI_API_KEY` | 保留既有 AI 設定名稱；本階段不呼叫 | 選填 |
+| `GEMINI_API_KEY` / `OPENAI_API_KEY` | 雲端模型設定；本階段不呼叫 | 選填 |
+| `EINVOICE_APP_ID` / `EINVOICE_API_KEY` | 財政部平台憑證；僅啟用該整合才需要 | 選填 |
+| `BLOB_READ_WRITE_TOKEN` | 保留既有 Blob 設定名稱，不自動選用 | 選填 |
+| `MODULE_BACKEND` / `REMOTE_API_BASE_URL` | 模式與公開的 API 自己雲端網址；遠端傳輸尚未接線 | 本機無機密 |
+| `DB_POOL_MODE` / `DB_SSL_MODE` / `DB_CONNECT_TIMEOUT_SECONDS` | 預設 transaction / require / 5 秒；需核對實際連線模式 | 有預設 |
+| `SUPABASE_URL` / `SUPABASE_STORAGE_BUCKET` | Storage 公開設定 | 檔案模組必填 |
+| `SUPABASE_SECRET_KEY` | 雲端 Storage 專用機密 | 檔案模組必填 |
 
 新增變數時：`.env.example`、`app/core/config.py`、本表、Vercel Project Settings 四處同步。
 
