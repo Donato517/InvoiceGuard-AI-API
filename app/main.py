@@ -14,9 +14,10 @@ from fastapi import FastAPI
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging_config import setup_logging
-from app.routers import cron, health
+from app.routers import cron, health, robots
 from app.routers.v1 import api_router as v1_router
 
+settings.require_environment()
 setup_logging()
 
 app = FastAPI(
@@ -33,5 +34,6 @@ register_exception_handlers(app)
 
 # ---- 路由 ----
 app.include_router(health.router)
+app.include_router(robots.router)
 app.include_router(v1_router, prefix="/api/v1")
 app.include_router(cron.router, prefix="/api/cron")

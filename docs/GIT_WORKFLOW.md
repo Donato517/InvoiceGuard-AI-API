@@ -1,5 +1,10 @@
 # Git 協作規範
 
+先讀 [AGENTS.md](../AGENTS.md)／[CLAUDE.md](../CLAUDE.md)；本文件是團隊流程參考，
+不是對目前任務執行 Commit、Push、Merge、migration 或部署的授權。
+除非人類在當前任務明確授權，保留分支、索引與未提交修改，不自動執行上述動作。
+開發狀態見 [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md)，提交前檢查見 [PROJECT_CHECKS.md](PROJECT_CHECKS.md)。
+
 > 三個專案（InvoiceGuard-AI / InvoiceGuard-AI-API / InvoiceGuard-AI-ADMIN）共用相同規範。
 
 ## 1. 分支策略
@@ -64,7 +69,7 @@ docs: 補充排程規則說明
 | 異動類型 | 影響 | 順序 |
 |---|---|---|
 | API 回應格式 | 前台 | 1. API 專案完成並合併（保持向下相容）<br>2. 前台調整，PR 說明註明相依的 API PR<br>3. 不相容變更依 API 專案 `docs/API_CONVENTIONS.md` 升版 |
-| 資料表結構 | 後台 | 1. API 專案修改 Model + migration，合併後執行 migration<br>2. 後台同步 `app/db/models/` 對應檔案<br>（詳見 API 專案 `app/db/README.md` 第 9 節） |
+| 資料表結構 | 後台 | 1. API 專案修改 Model + migration，取得個別授權後由管理者在隔離測試庫驗證及安排受控 migration<br>2. 後台同步 `app/db/models/` 對應檔案<br>（詳見 API 專案 `app/db/README.md` 第 9 節） |
 
 ## 5. 禁止事項
 
@@ -72,3 +77,11 @@ docs: 補充排程規則說明
 - 提交 `.venv/`、`__pycache__/`、`tmp/` 內容
 - 對 `main` / `develop` 使用 `git push --force`
 - 修改已合併的 migration 版本檔（API 專案）
+
+
+## AI 交付前必查
+
+1. 執行本站 `python -B scripts/check_project.py`、相關 pytest 與 Ruff；有三站 clone 時，以 `--project-root` 再比對共同契約與 ORM。
+2. 檢查已追蹤及未追蹤檔案；`git diff --check` 不涵蓋未追蹤檔案，不得據此推定全部檔案已掃描。
+3. 不提交 `.env`、含值的本機設定、連線字串、Token、驗收存取碼、資料庫匯出、真實發票或暫存證據。
+4. 回報改動檔案、測試與限制；若依使用者授權修正檢驗問題，將原因與結果記錄在 `docs/REVIEW_FIX_LOG.md`。

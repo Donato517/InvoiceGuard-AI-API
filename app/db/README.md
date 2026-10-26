@@ -1,13 +1,20 @@
 # DB 模組（`app/db`）
 
+AI 先讀根目錄 [AGENTS.md](../../AGENTS.md)／[CLAUDE.md](../../CLAUDE.md)，
+目前實作狀態見 [DEVELOPMENT_STATUS.md](../../docs/DEVELOPMENT_STATUS.md)，
+契約／ORM 同步及 Repository 分層檢查見 [PROJECT_CHECKS.md](../../docs/PROJECT_CHECKS.md)。
+此文件的部署與 migration 流程只是管理者維運參考，並非當前任務授權。
+本機的 DATABASE_URL 只由 START 注入程序記憶體（2026-10-25 核定，連正式 DB）；不得下載連線字串或寫入檔案。
+
 > 本資料夾是資料庫結構的**唯一真相來源（Single Source of Truth）**：
 > 每張資料表的完整 Schema 寫在 `models/*.py` 的**檔案開頭備註**，ORM 定義緊接在下方，
 > 所有結構異動都透過 `migrations/` 版本化。不另外維護會與程式脫節的 Excel / Word 規格書。
 
-本次第一階段僅增加 `contracts.py` 型別契約及 `session.py` 設定保護，未改 ORM、migration 或資料表。
-Engine 延遲建立且每次先驗證雲端限制；本機直接建立 Engine 會被阻擋。
-Alembic（`migrations/env.py`）不經此阻擋，只由管理者在受控環境執行，但同樣以 `resolve_ssl_mode()` 強制 TLS。
-transaction pooler 模式停用 prepared statements；實際連線與權限尚未測試。
+第一階段增加 `contracts.py` 型別契約及 `session.py` 設定保護，未改 ORM、migration 或資料表。
+Engine 延遲建立，先驗證 PostgreSQL 格式與 TLS，不限制執行位置；本機由 START 注入的 DATABASE_URL 連的是正式 DB。
+Alembic（`migrations/env.py`）同樣以 `resolve_ssl_mode()` 強制 TLS；連線優先用 `DATABASE_URL_UNPOOLED`，未設定時沿用 `DATABASE_URL`。
+transaction pooler 模式停用 prepared statements；2026-10-25 已實測唯讀 SELECT 1，寫入權限尚未驗證。
+ADMIN 以固定 SQL 存取的 v1.3 身分表（`invoiceguard_identity.user_accounts`、`public.user_profiles`、`public.departments`、`public.user_departments`）目前在本站沒有對應 Model 或 migration。
 見 [MODULE_CONTRACT.md](../../docs/MODULE_CONTRACT.md)。
 
 ---
@@ -126,16 +133,19 @@ YYYY-MM-DD  <作者>  <異動說明>（revision: <revision id>）
 
 ---
 
-## 7. Migration 流程（Alembic）
+## 7. Migration 流程（Alembic；管理者受控維運參考）
+
+建立 migration 檔（`alembic revision`，步驟 1–3）屬一般開發；執行（`upgrade`／`downgrade`）需使用者明確授權並確認目標資料庫。
+本機程序若帶有 START 注入的 DATABASE_URL，執行就會作用在正式 DB。
 
 ```bash
 # 1. 修改 models/*.py（ORM 定義 + 檔頭 Schema 備註）
 # 2. 依 Model 差異產生版本檔
 alembic revision --autogenerate -m "add risk_score to invoices"
 # 3. 人工檢查 versions/ 內產生的檔案（見下方注意事項）
-# 4. 套用到本機資料庫
+# 4. 管理者在受控執行器套用到隔離測試資料庫（非正式資料）
 alembic upgrade head
-# 5. 確認可以退版
+# 5. 僅在可拋棄的隔離測試資料庫確認可以退版
 alembic downgrade -1 && alembic upgrade head
 ```
 
@@ -148,7 +158,7 @@ alembic downgrade -1 && alembic upgrade head
 
 **同一個 PR 內必須包含：** ORM 變更、Schema 備註更新、migration 版本檔、本文件「資料表索引」更新。
 
-**正式環境：** PR 合併後，由負責人以 `DATABASE_URL_UNPOOLED`（直連）執行 `alembic upgrade head`，再部署 API。
+**正式環境維運：** 完成隔離測試、審核及另行操作授權後，由負責人在受控雲端執行器使用 `DATABASE_URL_UNPOOLED`（直連）執行核定版本，再依核定流程部署 API；PR 合併本身不構成 migration／部署授權。
 
 **禁止事項：**
 
@@ -181,7 +191,7 @@ alembic downgrade -1 && alembic upgrade head
 
 **結構異動流程：**
 
-1. 本專案修改 `models/*.py` 並產生 migration，PR 合併後執行 `alembic upgrade head`
+1. 本專案修改 `models/*.py` 並建立 migration 檔；執行另取授權，正式環境依核定流程處理
 2. 後台同步修改 `app/db/models/` 對應檔案：ORM 定義、Schema 備註、異動紀錄（註明本專案的 revision id）
 3. 部署順序：**migration → API → 後台**
 

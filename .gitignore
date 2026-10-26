@@ -13,6 +13,9 @@ htmlcov/
 .env
 .env.*
 !.env.example
+# 本機公開 URL 即使誤入 Git，雲端也不讀取
+dev-urls.local.json
+dev-settings.local.json
 
 # ---- 暫存 / 日誌（tmp/ 只保留 .gitkeep）----
 tmp/*

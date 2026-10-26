@@ -1,7 +1,9 @@
 """
 模組名稱：app.integrations.storage_client
-功能說明：雲端 Storage 的內部介面；路徑與權限須由上層服務決定。
-注意事項：本階段沒有 Supabase 實作，不可由路由直接傳入任意 Bucket 或物件路徑。
+功能說明：第一階段的 Storage 介面契約（StorageClient Protocol）；尚未接線，get_storage_client() 一律拋出 ModuleNotReadyError。
+注意事項：
+    - 檔案存取使用 Vercel 模組 app.integrations.supabase_storage（S3StorageClient），不是本檔。
+    - 路徑與權限須由上層服務決定，不可由路由直接傳入任意 Bucket 或物件路徑。
 """
 
 from datetime import datetime

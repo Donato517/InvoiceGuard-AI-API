@@ -15,11 +15,18 @@ from fastapi.testclient import TestClient
 
 # 在測試模組匯入 app 前清除已知繼承設定；只檢查名稱，不保存或列印原值。
 _CONFIGURATION_NAMES = {
+    "APP_NAME",
+    "LOCAL_SECRET_FIELDS",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "GOOGLE_API_KEY",
+    "VERCEL_TOKEN",
+    "SESSION_SECRET_KEY",
     "APP_ENV",
     "DEBUG",
     "MODULE_BACKEND",
     "REMOTE_API_BASE_URL",
     "VERCEL",
+    "VERCEL_ENV",
     "DATABASE_URL",
     "DATABASE_URL_UNPOOLED",
     "JWT_SECRET_KEY",

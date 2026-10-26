@@ -1,97 +1,43 @@
-# 提供給 Desktop Claude AI 的檢驗指令
+# 歷史檢驗指令：三站 AI 協作規範與自動檢查
 
-請獨立檢驗 InvoiceGuard 的 ADMIN 與 API「第一階段 Vercel / DB 模組」，先出具報告，不修改程式。
+> 這是過去一次檢驗任務的指令，保留作紀錄，不是現行規則；其中「本輪」的範圍限制只適用當時。現行規則以 AGENTS.md 為準。
 
-先確認你是否具備存取本機檔案與 PowerShell 的工具。若沒有，請提供逐步指令讓管理者執行，
-並請管理者回傳不含機密的輸出；不得聲稱你已讀檔、連線 Vercel 或執行測試。
+本指令取代本站舊第一階段檢驗提示；歷史結果不得當成本次重跑證據。可將下方整段交給 Desktop Claude／Claude Code，並給予三站本機目錄存取權，不提供公司密鑰。
 
-## 範圍與限制
+```text
+請獨立檢驗 C:\InvoiceGuard_project 下的 InvoiceGuard-AI、InvoiceGuard-AI-ADMIN、InvoiceGuard-AI-API 最新未提交工作。實際根目錄不同時只調整根目錄；不要假定三站 Git branch 或未提交檔案可覆寫。
 
-- 專案根目錄為 `C:\InvoiceGuard_project`，兩個 Repository 各自有模組，不將 ADMIN 改成只靠 API 存取資料。
-- 本次驗收只涵蓋靜態設定驗證、資料與檔案介面契約、離線單元測試；不是完整業務功能驗收。
-- 不讀取或輸出任何實際 `.env`、`.env.*`、`.vercel`、憑證檔、密碼、Token 或完整秘密連線字串。
-  `.env.example` 只允許檢查設定名稱與空白／明確的假值；不要列印完整程序環境。
-- 不登入 Vercel / Supabase 管理介面，不執行 `vercel env pull`、部署、migration、seed 或真實排程。
-- 不連公司 DB / Storage / AI，不上傳、刪除或修改任何正式資料；不呼叫雲端 Cron URL。
-- 不執行 Git Pull / Reset / Merge / Commit / Push，不修正程式或使用 Ruff --fix。
-- 允許執行以下單元測試及檢查；僅允許產生一般測試快取與專用 `tmp/pytest` 暫存。
-  不重建已有 venv；缺少依賴時先回報，不自行更換版本。
-- 不將 `VERCEL=1` 或 `APP_ENV=local` 當作身分授權證明，也不在一般 Shell 偽造雲端執行成功。
+目標：驗證 AGENTS.md／CLAUDE.md 的共同規範入口、文件對齊、版本化契約與分層檢查可讓不同 AI 一致開發。本輪只處理這些規範／檢查問題，不實作 CRUD／Storage 或新增身分系統。
 
-## 先閱讀真實檔案
+先讀三站 AGENTS.md、CLAUDE.md、README、docs/DEVELOPMENT_STATUS.md、PROJECT_CHECKS.md、TEST_REPORT.md、REVIEW_FIX_LOG.md，再讀 scripts/check_project.py、contracts/project-contract.json、tests/unit/test_project_governance.py 及對應來源。確認 CLAUDE.md 明確 @AGENTS.md；若目前 AI 產品沒有自動載入，請手動讀完，不宣稱工具一定已自動載入。
 
-1. `C:\InvoiceGuard_project\InvoiceGuard-AI-ADMIN\docs\MODULE_CONTRACT.md`
-2. `C:\InvoiceGuard_project\InvoiceGuard-AI-API\docs\MODULE_CONTRACT.md`
-3. 兩站的 `docs/ARCHITECTURE.md`、`docs/CODING_CONVENTIONS.md`、`app/db/README.md`。
-4. 兩站的 `app/core/config.py`、`app/core/module_errors.py`、`app/core/security.py`、`app/db/session.py`。
-5. 兩站的 `app/integrations/vercel.py`、`storage_client.py`、`app/db/contracts.py`、
-   `app/services/data_service.py`、`file_service.py`、`app/schemas/common.py`、`data.py`、`files.py`。
-6. API 額外閱讀 `app/schemas/invoice.py`、`app/core/exceptions.py`、`docs/API_CONVENTIONS.md`。
-7. 兩站的 `tests/conftest.py`、既有測試與新增 `tests/unit/test_module_*.py`、`test_db_session.py`。
+先保存唯讀 Git branch／HEAD／index／status 基準，保留全部既有修改。不讀、列印或下載實際密碼、連線字串、Token／私鑰；不做 vercel env pull。測試只用合成假值，保留現有網路／真 DB 阻擋器，暫存放專案外，禁用 bytecode 與 pytest／Ruff cache。不要新增管理員帳號或索取 Vercel／Supabase 管理權限。
 
-可用 `git status --short` 與 `git diff --check` 作唯讀檢查。注意 `git diff` 不包含未追蹤新檔，
-必須另外讀取新增模組與測試，不可只看已追蹤檔案的 diff。
-不需要讀 Git 遠端認證或登入任何平台。
+每站使用自己的 Python 3.12 venv，從該站根目錄實際執行：
+  .\.venv\Scripts\python.exe -B scripts/check_project.py
+  .\.venv\Scripts\python.exe -B -m pytest -q -p no:cacheprovider --basetemp <該站專用的專案外暫存>
+  .\.venv\Scripts\python.exe -B -m ruff check --no-cache app tests scripts
+  .\.venv\Scripts\python.exe -B -m ruff format --check app tests scripts
+UI 兩站另外執行：
+  .\.venv\Scripts\python.exe -B -m djlint app/templates --lint
+三站齊全後從任一站再執行：
+  .\.venv\Scripts\python.exe -B scripts/check_project.py --project-root ..
 
-## 執行並記錄結果
+驗證重點：
+1. 只有單站副本也能通過，不需兄弟 Repo、app import、網路或公司密鑰。從其他工作目錄用檢查腳本絕對路徑也能使用。
+2. 所有 app Python 都掃描，不能靠新檔、相對 import、別名、函式內／TYPE_CHECKING import、動態 import、額外 dotenv／BaseSettings 繞過規範。Router 不直連 DB，前台一般 Router 不直接 HTTP；Service 控交易但 Repository 不 commit；schemas／DB／integrations 不能向上相依。
+3. 精確保留 core/deps DI、前端 core/exceptions 的 ApiError 及手機 loopback health httpx 例外，不能放寬成整層通行。既有安全／授權測試不能變弱。
+4. 在專案外副本實際突變：DTO 大小／驗證器、common 常數、ORM 真正約束、共同規範、契約快照／缺檔、新未知目錄，確認檢查失敗；合法 docstring／格式差異不誤報。不在實際專案改壞後留下殘檔。
+5. 快照必須保留驗證器函式體、SQL 常數及 ORM 約束，不能只查介面名字。同步修改 snapshot 不是安全保證；不得以重建快照、刪測試或放寬例外掩蓋失敗。若確為本輪基準錯誤，記錄原因與跨站實際差異，修正一致的基準而不弱化規則。
+6. 三站 README 與架構以 START.cmd 與 Repository 全名別名作日常入口，內部埠只標診斷；Blob／Supabase 與 migration 流程不再矛盾。核對實作／契約／TODO 狀態，不將頁面、health、Protocol 當成業務完成。
+7. CI 只 checkout 本站，以 Windows/Linux Python3.12 執行無密鑰檢查；contents:read，無公司 secrets、部署、migration 或 pull_request_target 權限提升。不自行觸發 GitHub CI 或建立PR/Push。
+8. 原三站框架、ADMIN 自有 DB、API Schema ownership、公司機密雲端邊界與未實作工廠 fail closed 都維持。除兩份手機模板的 Jinja 檔頭註解，本輪不應更改業務程式。
 
-下列指令以目前電腦的路徑為準；不同開發者只替換專案根目錄。
-一次進入一個 Repository，兩站都有名為 `app` 的套件，不可在同一個 Python 程序混用匯入。
+如果發現本輪範圍內問題，請直接修正、補有效回歸測試並重跑受影響檢查，不必逐項再詢問。同步其他站的共同副本／文件；更新各受影響站 docs/TEST_REPORT.md 與 docs/REVIEW_FIX_LOG.md，逐項記錄日期、嚴重度、重現、原因、修正檔案、驗證指令與實際結果、未驗收項目。沒有發現問題也留下範圍與結果，不能只回聊天。
 
-ADMIN：
+若改動核定契約快照，說明必要性與來源，不得無理由更新所有快照來變綠。STARTUP 本輪未修改；只有真的改到 STARTUP 內容，才須同步其 TEST_REPORT 與 SHA256SUMS，不可無故重產歷史文件。
 
-```powershell
-Set-Location 'C:\InvoiceGuard_project\InvoiceGuard-AI-ADMIN'
-.\.venv\Scripts\python.exe -m app.integrations.vercel --check local
-.\.venv\Scripts\python.exe -m pytest -q --basetemp=tmp/pytest
-.\.venv\Scripts\python.exe -m ruff check app tests
-.\.venv\Scripts\python.exe -m ruff format --check app tests
+禁止部署、執行 migration／seed／真實排程、修改正式資料、Commit／Merge／Push、reset 或覆寫既有工作。不要啟 Tunnel／服務或操作公司登入，本輪是規範／離線檢查驗收。無法在目前環境執行的 Windows/Linux/GitHub 測試明列未執行，不以文件或前次結果冒充通過。
+
+完成後用繁體中文提供：發現與直接修正清單、實測結果、保留的限制、處理紀錄與測試報告的完整路徑、Git基準是否維持。
 ```
-
-API：
-
-```powershell
-Set-Location 'C:\InvoiceGuard_project\InvoiceGuard-AI-API'
-.\.venv\Scripts\python.exe -m app.integrations.vercel --check local
-.\.venv\Scripts\python.exe -m pytest -q --basetemp=tmp/pytest
-.\.venv\Scripts\python.exe -m ruff check app tests scripts
-.\.venv\Scripts\python.exe -m ruff format --check app tests scripts
-```
-
-每條指令之後記錄 `$LASTEXITCODE`，失敗時保留不含機密的錯誤摘要。
-`tmp/pytest` 是 pytest 專用暫存目錄，可能在重跑時清理；有其他資料時先停止並回報。
-不使用 `scripts/run_job.py`、`scripts/seed_dev_data.py` 或 Alembic 驗證本階段。
-Starlette 對 httpx 的淘汰警告應獨立記錄，不自動更換套件或當作雲端整合失敗。
-若 Windows 沙箱阻擋 socketpair，請回報環境限制，在一般 PowerShell 重跑；不移除網路／DB 阻擋器。
-
-只有在服務已啟動時，才可用 localhost GET 驗證：
-
-- ADMIN：`http://127.0.0.1:8002/health`、`http://127.0.0.1:8002/login`。
-- API：`http://127.0.0.1:8000/health`；根路徑沒有網站，預設 `/docs` 不開放。
-
-不要因為健康檢查成功就聲稱 DB / Storage / 使用者授權可用。
-
-## 必須核對的重點
-
-1. 預設不讀 `.env`，本機不需要公司密鑰；設定輸出、repr、JSON、錯誤不包含秘密值。
-2. API 的 DATABASE_URL_UNPOOLED、JWT、Cron、AI、Blob 等既有設定沒有因複製 ADMIN 而遺失或誤用。
-   API 不要求 ADMIN 的 SESSION_SECRET_KEY；CRON_SECRET 不代替使用者登入。
-3. PostgreSQL URL 轉換、TLS、NullPool、逾時、transaction 模式 prepare_threshold=None 正確；
-   缺設定或本機模式在 create_engine 前被拒絕，快取 Engine 不得略過重新驗證。
-4. 不因 APP_ENV=local 略過既有登入／Cron 授權，不從請求接收可信的角色或擁有者。
-5. 檔案與發票 DTO 拒絕任意 SQL、表名、Bucket、object_key、角色／擁有者覆寫及未核定欄位；
-   金額、分頁、版本、冪等識別碼、路徑與時區的驗證是否足夠。
-6. 實際服務工廠明確拋出 ModuleNotReadyError；不以空清單、零筆或假成功冒充業務已完成。
-7. OperationContext / Protocol 是契約，不是真實登入或部門授權；metadata 表及 version 欄位尚未建立。
-8. 單元測試清除已知繼承設定、使用假值、阻擋網路與真實 DB；Windows socketpair 放行範圍是否合理。
-   API Cron 測試只呼叫替身，不執行真實排程。
-9. API 422 回應不反射 input / ctx 或合成機密值；既有錯誤 JSON 外層與分頁 JSON 欄位保持相容。
-10. ADMIN 與 API 的共用檔案／CRUD 契約是否一致；沒有改 ORM、migration 或 vercel.json，沒有雲端設定變更。
-
-## 報告格式
-
-先列可重現問題，依嚴重度排序，附完整檔案路徑、行號、觸發方式、影響與最小修正建議。
-再列各指令的實際結果、exit code、警告與未執行項目。
-最後區分「已實作並通過離線測試」「只有契約」「尚未實作」「尚未進行的雲端整合驗證」。
-不得把本機未配置遠端網址推論為 Vercel 缺設定，也不得將未實作的真實 CRUD / Storage 視為本階段已完成。
-請先交付檢驗報告，不直接修改任何程式。

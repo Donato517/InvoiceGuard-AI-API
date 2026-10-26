@@ -25,6 +25,7 @@ def cloud_settings(**values: Any) -> Settings:
     """建立不會連網的雲端設定替身。"""
     defaults = {
         "VERCEL": "1",
+        "VERCEL_ENV": "preview",
         "APP_ENV": "preview",
         "DATABASE_URL": FAKE_DATABASE_URL,
         "SUPABASE_URL": "https://storage.example.invalid",
@@ -50,7 +51,9 @@ def test_dotenv_is_not_loaded_by_default(tmp_path: Path, monkeypatch: pytest.Mon
     assert Settings().DATABASE_URL.get_secret_value() == ""
 
 
-@pytest.mark.parametrize("name", Settings.CLOUD_SECRET_FIELDS)
+@pytest.mark.parametrize(
+    "name", [name for name in Settings.CLOUD_SECRET_FIELDS if name != "DATABASE_URL"]
+)
 def test_local_rejects_company_secret_fields(name: str) -> None:
     report = make_settings(**{name: "synthetic-secret"}).check_configuration("local")
     assert not report.is_valid
@@ -99,7 +102,6 @@ def test_cloud_requires_explicit_safe_execution_context(values: dict[str, Any]) 
 @pytest.mark.parametrize(
     "url",
     [
-        "",
         "postgresql://",
         "sqlite:///test.db",
         "postgresql://user:password@host",
@@ -241,3 +243,64 @@ def test_cli_reports_no_connection_and_returns_exit_codes(
     assert json.loads(capsys.readouterr().out)["connectivity_checked"] is False
     assert vercel.main(["--check", "cloud"]) == 2
     assert json.loads(capsys.readouterr().out)["configuration_valid"] is False
+
+
+# ---- 本機 DB（2026-10-25 依核定與 ADMIN DB 模組相同）----
+
+
+def test_empty_database_url_is_reported_as_required() -> None:
+    codes = {
+        (issue.field, issue.code)
+        for issue in cloud_settings(DATABASE_URL="").check_configuration("database").issues
+    }
+    assert ("DATABASE_URL", "required") in codes
+    assert ("DATABASE_URL", "invalid_postgres_url") not in codes
+
+
+@pytest.mark.parametrize("backend", ["auto", "remote"])
+def test_local_database_configuration_uses_provided_url_without_vercel(backend: str) -> None:
+    configuration = make_settings(DATABASE_URL=FAKE_DATABASE_URL, MODULE_BACKEND=backend)
+    assert configuration.APP_ENV == "local"
+    assert configuration.VERCEL == configuration.VERCEL_ENV == ""
+    assert configuration.check_environment()["configuration_valid"]
+    configuration.require_environment()
+    assert configuration.check_configuration("database").is_valid
+    assert configuration.check_configuration("local").is_valid
+    assert "remote_not_configured" not in {
+        issue.code for issue in configuration.check_configuration("local").issues
+    }
+    assert "synthetic-password" not in json.dumps(configuration.check_environment())
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "not-a-postgres-url",
+        "sqlite:///test.db",
+        FAKE_DATABASE_URL.replace("sslmode=require", "sslmode=disable"),
+        FAKE_DATABASE_URL + "&pgbouncer=true",
+    ],
+)
+def test_local_database_still_requires_valid_tls_connection_settings(url: str) -> None:
+    configuration = make_settings(DATABASE_URL=url)
+    report = configuration.check_configuration("database")
+    assert not report.is_valid
+    assert not any(
+        issue.code in {"cloud_runtime_required", "cloud_environment_required"}
+        for issue in report.issues
+    )
+    assert not configuration.check_environment()["configuration_valid"]
+    assert "synthetic-password" not in json.dumps(report.as_dict())
+
+
+def test_local_storage_settings_are_not_company_secret_errors() -> None:
+    configuration = make_settings(
+        S3_ENDPOINT_URL="https://ref.example.invalid/storage/v1/s3",
+        S3_REGION="synthetic-1",
+        S3_ACCESS_KEY_ID="synthetic-access",
+        S3_SECRET_ACCESS_KEY="synthetic-secret-access",
+        SUPABASE_STORAGE_BUCKET="bucket",
+    )
+    assert configuration.check_environment()["configuration_valid"]
+    assert configuration.check_configuration("local").is_valid
+    assert "synthetic-secret-access" not in repr(configuration)

@@ -91,6 +91,7 @@ def test_cloud_invalid_cron_configuration_is_unauthorized(
 ) -> None:
     monkeypatch.setattr(settings, "VERCEL", "1")
     monkeypatch.setattr(settings, "APP_ENV", "preview")
+    monkeypatch.setattr(settings, "VERCEL_ENV", "preview")
     monkeypatch.setattr(settings, "CRON_SECRET", secret)
     with pytest.raises(UnauthorizedError):
         verify_cron_secret("Bearer " + secret)
@@ -115,6 +116,7 @@ def test_cloud_valid_cron_secret_still_requires_matching_header(
 ) -> None:
     monkeypatch.setattr(settings, "VERCEL", "1")
     monkeypatch.setattr(settings, "APP_ENV", "preview")
+    monkeypatch.setattr(settings, "VERCEL_ENV", "preview")
     with pytest.raises(UnauthorizedError):
         verify_cron_secret("Bearer different-synthetic-secret")
     verify_cron_secret("Bearer " + cron_secret)

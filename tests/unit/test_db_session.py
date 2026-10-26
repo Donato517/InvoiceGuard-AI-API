@@ -26,6 +26,7 @@ def fake_cloud(**values: Any) -> Settings:
     """僅供參數驗證的假 DSN，不建立真實連線。"""
     defaults = {
         "VERCEL": "1",
+        "VERCEL_ENV": "preview",
         "APP_ENV": "preview",
         "DATABASE_URL": "postgresql://user:synthetic@db.example.invalid:6543/test?sslmode=require",
     }

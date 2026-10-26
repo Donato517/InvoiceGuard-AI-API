@@ -51,5 +51,5 @@ class FileService(Protocol):
 
 
 def get_file_service() -> FileService:
-    """實際 Storage、metadata 與授權尚未接線，拒絕執行操作。"""
+    """第一階段 FileService 契約尚未整合 metadata 與授權，拒絕建立服務；不是另一個 Storage 模組。"""
     raise ModuleNotReadyError

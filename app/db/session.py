@@ -42,7 +42,7 @@ def resolve_ssl_mode(url: URL) -> str:
 
 
 def get_engine() -> Engine:
-    """每次先驗證雲端限制，再取得延遲建立的 Engine 單例。"""
+    """每次先驗證 DB 連線設定，再取得延遲建立的 Engine 單例；不限制執行位置。"""
     settings.require_configuration("database")
     return _get_engine()
 

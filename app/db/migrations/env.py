@@ -6,7 +6,7 @@
       （優先使用 DATABASE_URL_UNPOOLED 直連，pooler 不適合執行 DDL）。
     - target_metadata 指向 Base.metadata；新增 Model 後須在 app/db/models/__init__.py 匯入，
       autogenerate 才偵測得到。
-    - 不經 app.db.session 的本機阻擋：migration 只由管理者在受控環境執行；
+    - 應用程式的 Engine 由 app.db.session 建立；本檔是 Alembic 執行環境，另建 migration Engine，執行需明確授權；
       但與應用程式 Engine 相同強制 TLS（resolve_ssl_mode），不得降級為明文。
 """
 

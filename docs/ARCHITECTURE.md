@@ -1,5 +1,10 @@
 # 系統架構說明 — InvoiceGuard-AI-API
 
+AI 先讀根目錄 [AGENTS.md](../AGENTS.md)（Claude 見 [CLAUDE.md](../CLAUDE.md)），
+再依 [開發狀態](DEVELOPMENT_STATUS.md) 區分已完成能力與目標設計。
+本文件描述分工，不代表外部服務或每個流程均已接線。日常三站啟動與全名別名見 [README](../README.md)，
+無密鑰分層與契約檢查見 [PROJECT_CHECKS.md](PROJECT_CHECKS.md)。
+
 ## 1. 系統全貌
 
 InvoiceGuard AI 由三個獨立的 Git repository 組成，**全部以 Python 撰寫**，各自部署為一個 Vercel Python Function：
@@ -34,7 +39,7 @@ InvoiceGuard AI 由三個獨立的 Git repository 組成，**全部以 Python �
 | **InvoiceGuard-AI-API**（本專案） | 後端 API：AI 分析、第三方串接、排程 | FastAPI | 自有 DB 模組 + Alembic |
 
 外部服務規劃：PostgreSQL、AI 模型服務、財政部電子發票整合服務平台（MOF e-Invoice）。
-原有 Vercel Blob 只是 TODO 骨架；新 Storage 契約規劃先接 Supabase，實際 adapter 尚未實作。
+原有 Vercel Blob 只是 TODO 骨架；Storage 改接 Supabase：Vercel 模組（檔案存取）`integrations/supabase_storage.py` 已有；第一階段契約 `storage_client` 工廠尚未接線。
 保留原有 Blob 設定名稱，不代表已經執行供應商遷移或部署。
 
 **資料庫共用規則**：後台直接存取同一個資料庫，但**資料表結構只能由本專案的 Alembic migration 變更**；
@@ -47,7 +52,7 @@ InvoiceGuard AI 由三個獨立的 Git repository 組成，**全部以 Python �
 ```
 routers ──▶ services ──▶ db/repositories ──▶ db/models
                │
-               └──▶ integrations（AI / 財政部 / Blob）
+               └──▶ integrations（AI / 財政部 / Storage adapter）
 
 jobs ──▶ services                 （排程重用同一套商業邏輯）
 schemas：routers 與 services 之間傳遞的資料格式
@@ -77,26 +82,30 @@ InvoiceGuard-AI-API/
 ├── app/                          # 應用程式主套件
 │   ├── main.py                   # ★ 進入點：建立 FastAPI app、註冊 middleware / 例外 / 路由（Vercel 自動偵測）
 │   ├── core/                     # 全域核心
-│   │   ├── config.py             #   環境變數設定（唯一讀取環境變數的地方）
+│   │   ├── config.py             #   設定公開入口（環境隔離由 core/environment.py 處理）
+│   │   ├── constants.py          #   三站共用：網址（Vercel 用正式、本機用開發）、網站名稱、圖示、搜尋引擎 noindex
+│   │   ├── environment.py        #   三站相同：環境隔離、本機機密拒絕（check_project 快照比對）
+│   │   ├── module_errors.py      #   模組未就緒／設定錯誤例外（ModuleNotReadyError 等）
 │   │   ├── deps.py               #   FastAPI 相依注入型別（DbSession、CurrentUser…）
 │   │   ├── exceptions.py         #   業務例外類別 + 全域錯誤處理（統一錯誤格式）
 │   │   ├── logging_config.py     #   日誌格式
 │   │   └── security.py           #   Cron 驗證、JWT、密碼雜湊
 │   ├── routers/                  # HTTP 路由層
 │   │   ├── health.py             #   GET /health
+│   │   ├── robots.py             #   GET /robots.txt（內容取自 core/constants.py；不收錄靠 X-Robots-Tag）
 │   │   ├── cron.py               #   GET /api/cron/*（僅供 Vercel Cron）
 │   │   └── v1/                   #   /api/v1/*
-│   │       ├── auth.py           #     登入 / 登出 / 目前使用者
-│   │       └── invoices.py       #     前台發票
-│   ├── schemas/                  # Pydantic 請求 / 回應模型（DTO）
-│   │   └── common.py             #   分頁、錯誤格式
-│   ├── services/                 # 商業邏輯層
-│   ├── integrations/             # 第三方 API 串接（ai_client / einvoice_client / storage_client）
-│   ├── jobs/                     # 排程工作（runner.py 為共用執行機制）
+│   │       ├── auth.py           #     登入 / 登出 / 目前使用者（TODO）
+│   │       └── invoices.py       #     前台發票（TODO）
+│   ├── schemas/                  # Pydantic 請求 / 回應模型（common 分頁／錯誤格式、auth、user、invoice、data、files）
+│   ├── services/                 # 商業邏輯層（data / file 為第一階段契約，未接線；db_connection 為唯讀 SELECT 1 檢查）
+│   ├── integrations/             # ai_client、einvoice_client、supabase_storage（Vercel 模組：檔案存取，與 ADMIN 相同）、storage_client（第一階段契約，未接線）、vercel（執行環境資訊與設定檢查）
+│   ├── jobs/                     # 排程工作（runner.py 為共用執行機制；目前為 stub）
 │   ├── db/                       # ★ 資料庫模組（說明見 app/db/README.md）
 │   │   ├── README.md             #   Schema 總覽、ERD、命名規則、Migration 流程
 │   │   ├── base.py               #   Base、約束命名規則、共用欄位 Mixin
 │   │   ├── session.py            #   Engine / Session / get_db
+│   │   ├── contracts.py          #   Repository 介面契約（Protocol）
 │   │   ├── models/               #   ORM Model，每個檔案開頭備註完整 Schema
 │   │   ├── repositories/         #   資料存取層
 │   │   └── migrations/           #   Alembic（env.py、script.py.mako、versions/）
@@ -105,13 +114,14 @@ InvoiceGuard-AI-API/
 │   ├── conftest.py               # 共用 fixture
 │   ├── unit/                     # 單元測試（不連資料庫）
 │   └── integration/              # 整合測試（需測試資料庫）
-├── scripts/                      # 維運 / 開發腳本（python -m scripts.<名稱>）
+├── scripts/                      # check_project.py（無密鑰檢查）、run_job.py、seed_dev_data.py（TODO）（python -m scripts.<名稱>）
+├── contracts/project-contract.json # 跨站非機密契約快照（check_project 使用）
 ├── docs/                         # 專案文件
 ├── tmp/                          # 本機暫存（不進版控；Vercel 上改用 /tmp）
 ├── .github/pull_request_template.md
 ├── .vscode/extensions.json       # 建議安裝的 VS Code 擴充套件
 ├── alembic.ini                   # Alembic 設定
-├── vercel.json                   # Vercel Function 設定 + Cron 排程
+├── vercel.json                   # Vercel Function 設定、Cron 排程、X-Robots-Tag noindex
 ├── requirements.txt              # 正式環境依賴（Vercel 安裝）
 ├── requirements-dev.txt          # 開發 / 測試依賴
 ├── ruff.toml                     # Lint / Format 設定
@@ -126,7 +136,7 @@ InvoiceGuard-AI-API/
 
 ## 4. 請求處理流程（範例：上傳發票）
 
-以下為目標設計。第一階段只完成設定與契約；JWT 登入、CRUD、Storage 與一般使用者授權仍待實作。
+以下為目標設計：JWT 登入、CRUD、上傳端點與一般使用者授權仍待實作。
 現有排程工作及 runner 也包含 TODO；測試以替身驗證 Cron 驗證，不執行同步。
 
 ```
@@ -134,7 +144,7 @@ POST /api/v1/invoices/upload
   │
   ├─ routers/v1/invoices.py      驗證檔案類型與大小、取得登入者（CurrentUser）
   ├─ services/invoice_service.py
-  │    ├─ integrations/storage_client.py   原始檔上傳到 Vercel Blob，取得 file_key
+  │    ├─ integrations/supabase_storage.py   以 Vercel 模組上傳檔案，取得 file_key
   │    ├─ db/repositories/invoice_repository.py   建立 invoices（status=pending）
   │    └─ commit
   └─ 回傳 InvoiceRead（schemas/invoice.py）
@@ -169,7 +179,7 @@ POST /api/v1/invoices/upload
 | 防止重複執行 | 以 PostgreSQL advisory lock 確保同一 job 同時只有一個在跑（`jobs/runner.py`） |
 | 執行紀錄 | 每次執行寫入 `job_runs`，後台可查看 |
 | 執行時間 | 受 `vercel.json` 的 `maxDuration`（目前 60 秒）限制 → 大量資料要分批，剩餘留待下次 |
-| 本機測試 | `python -m scripts.run_job <job>`，或帶 Authorization 標頭呼叫 `/api/cron/*` |
+| 本機測試 | `CRON_SECRET` 屬本機禁用機密，本機不能帶 Authorization 呼叫 `/api/cron/*`，以測試替身驗證；`python -m scripts.run_job <job>` 會連正式 DB，需使用者授權 |
 
 ### 5.4 新增排程步驟
 
@@ -188,7 +198,7 @@ Vercel Function 的檔案系統**只有 `/tmp` 可寫入**，且執行個體結�
 | 類型 | 本機 | Vercel | 規則 |
 |---|---|---|---|
 | 處理中暫存檔（PDF 解析、影像轉檔） | `tmp/` | `/tmp/invoiceguard` | 一律用 `app.utils.file_utils.temp_file_path()`，離開區塊自動刪除 |
-| 使用者上傳的原始檔 | 未來經授權呼叫 API 自己的雲端服務 | 規劃 Supabase Storage；adapter 尚未實作 | `file_key` 是現有欄位；獨立 metadata 表待另行規劃 |
+| 使用者上傳的原始檔 | START 注入 S3_*，與雲端同一個 Bucket（正式資料） | Supabase Storage，經 Vercel 模組；上傳端點尚未實作 | `file_key` 是現有欄位；獨立 metadata 表待另行規劃 |
 | 日誌 | console | Vercel Runtime Logs | 不寫入檔案 |
 | 測試 / 除錯輸出 | `tmp/` | — | `tmp/` 已列入 `.gitignore`，只保留 `.gitkeep` |
 
@@ -200,28 +210,31 @@ Vercel Function 的檔案系統**只有 `/tmp` 可寫入**，且執行個體結�
 
 完整範本見 [`.env.example`](../.env.example)，讀取統一透過 `app/core/config.py`。
 
-目前預設不讀 `.env`；下列機密只在雲端使用，不交付一般開發者。
-本機經 `app.db.session` 直接 DB 連線會被阻擋（Alembic migration 例外，但同樣強制 TLS）；`APP_ENV=local` 不跳過既有 Cron 驗證。
+本機 JSON、Vercel Preview／Production 的實際來源與啟動驗證以 [環境與 URL 隔離](ENVIRONMENT_ISOLATION.md) 為準；dotenv 與 secrets 目錄永遠不載入。
+
+預設不讀 `.env`。本機只由 START 注入核定的 `DATABASE_URL`、`S3_*`、`SUPABASE_STORAGE_BUCKET`（Production 值，連正式 DB／Storage）；其他機密（例如 `CRON_SECRET`、`JWT_SECRET_KEY`）出現在本機即拒絕啟動。`APP_ENV=local` 不跳過既有 Cron 驗證。
 完整能力別驗證與未完成項目見 [MODULE_CONTRACT.md](MODULE_CONTRACT.md)。
 
 | 變數 | 說明 | 必填 |
 |---|---|---|
-| `APP_ENV` | `local` / `preview` / `production`；Vercel 不會自動設定，必須明確設為 preview / production，否則 Cron 一律 401（日誌記錄欄位與代碼） | ✓ |
+| `APP_ENV` | `local` / `preview` / `production`；須與 `VERCEL_ENV` 一致，否則拒絕啟動。Vercel 不會自動設定，必須明確設為 preview / production | ✓ |
 | `DEBUG` | `true` 時開放 `/docs`；正式環境必須為 `false` | |
-| `DATABASE_URL` | PostgreSQL pooled 連線字串（應用程式使用） | ✓ |
-| `DATABASE_URL_UNPOOLED` | PostgreSQL 直連字串（Alembic 使用） | migration 時 |
-| `JWT_SECRET_KEY` / `JWT_EXPIRE_MINUTES` | 登入 token 簽章金鑰 / 有效分鐘數 | ✓ |
-| `CRON_SECRET` | Vercel Cron 驗證密鑰（至少 16 字元） | ✓ |
-| `AI_API_KEY` | 保留既有 AI 設定名稱；本階段不呼叫 | 選填 |
-| `GEMINI_API_KEY` / `OPENAI_API_KEY` | 雲端模型設定；本階段不呼叫 | 選填 |
+| `DATABASE_URL` | PostgreSQL pooled 連線字串（應用程式使用）；本機由 START 注入 | ✓ |
+| `DATABASE_URL_UNPOOLED` | PostgreSQL 直連字串（Alembic 優先使用，未設定時沿用 `DATABASE_URL`）；本機屬禁用機密 | migration 時 |
+| `JWT_SECRET_KEY` / `JWT_EXPIRE_MINUTES` | 登入 token 簽章金鑰 / 有效分鐘數；金鑰本機屬禁用機密 | 雲端 ✓ |
+| `CRON_SECRET` | Vercel Cron 驗證密鑰（至少 16 字元）；本機屬禁用機密 | 雲端 ✓ |
+| `AI_API_KEY` | 保留既有 AI 設定名稱；模型服務尚未串接 | 選填 |
+| `GEMINI_API_KEY` / `OPENAI_API_KEY` | 雲端模型設定；尚未串接 | 選填 |
 | `EINVOICE_APP_ID` / `EINVOICE_API_KEY` | 財政部平台憑證；僅啟用該整合才需要 | 選填 |
 | `BLOB_READ_WRITE_TOKEN` | 保留既有 Blob 設定名稱，不自動選用 | 選填 |
-| `MODULE_BACKEND` / `REMOTE_API_BASE_URL` | 模式與公開的 API 自己雲端網址；遠端傳輸尚未接線 | 本機無機密 |
+| `MODULE_BACKEND` / `REMOTE_API_BASE_URL` | 保留的模式欄位；只有 `integrations/vercel.get_platform()` 讀取，沒有遠端傳輸消費端 | 本機無機密 |
 | `DB_POOL_MODE` / `DB_SSL_MODE` / `DB_CONNECT_TIMEOUT_SECONDS` | 預設 transaction / require / 5 秒；需核對實際連線模式 | 有預設 |
-| `SUPABASE_URL` / `SUPABASE_STORAGE_BUCKET` | Storage 公開設定 | 檔案模組必填 |
-| `SUPABASE_SECRET_KEY` | 雲端 Storage 專用機密 | 檔案模組必填 |
+| `SUPABASE_URL` | 第一階段 storage 設定檢查使用；S3StorageClient 不讀此欄位 | 第一階段靜態檢查要求 |
+| `SUPABASE_STORAGE_BUCKET` | S3StorageClient 使用的 Bucket，亦由第一階段靜態檢查驗證 | Storage 用戶端必填 |
+| `SUPABASE_SECRET_KEY` | 第一階段 storage 設定檢查使用；S3StorageClient 改讀 S3 金鑰，不讀此欄位 | 第一階段靜態檢查要求 |
+| `S3_ENDPOINT_URL` / `S3_REGION` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | Supabase S3 相容端點與金鑰（`integrations/supabase_storage.py`）；本機由 START 注入 | Storage 用戶端必填 |
 
-新增變數時：`.env.example`、`app/core/config.py`、本表、Vercel Project Settings 四處同步。
+新增設定需先分類並核定；公開設定同步 `app/core/config.py`、`app/core/environment.py` 的允許集合／驗證、空值範本及文件，不能任意新增 JSON 欄位。公司機密只由管理者存於雲端；只新增或輪替雲端機密不改本機啟動器。
 
 ---
 
@@ -234,9 +247,9 @@ Vercel Function 的檔案系統**只有 `/tmp` 可寫入**，且執行個體結�
 | 依賴安裝 | `requirements.txt`（只放執行期套件，控制 bundle 大小） |
 | Function 設定 | `vercel.json` → `functions["app/main.py"]`：`maxDuration`、`excludeFiles` |
 | Production | `main` 分支自動部署 |
-| Preview | 其他分支 / PR 自動部署；環境變數另設，**資料庫使用獨立的測試庫或 Neon branch** |
+| Preview | 其他分支 / PR 自動部署；環境變數另設，**資料庫使用獨立的測試庫或核定的隔離分支** |
 | Cron | 只在 Production 觸發 |
-| Migration | **不在部署時自動執行**；PR 合併後由負責人手動 `alembic upgrade head`，再部署 |
+| Migration | **不在部署時自動執行**；`alembic upgrade head` 需使用者明確授權，完成後再部署 |
 
 ---
 

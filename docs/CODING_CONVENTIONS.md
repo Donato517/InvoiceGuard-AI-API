@@ -1,5 +1,9 @@
 # 開發規範與程式碼備註格式 — InvoiceGuard-AI-API（Python）
 
+AI 閱讀順序與權限先見 [AGENTS.md](../AGENTS.md)／[CLAUDE.md](../CLAUDE.md)。
+本文件保留命名及備註格式；[DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) 說明真實能力，
+[PROJECT_CHECKS.md](PROJECT_CHECKS.md) 說明自動檢查可驗證的規則及限制。
+
 ## 1. 基本原則
 
 1. 遵循 PEP 8，以 **Ruff** 自動檢查與格式化（`ruff check .`、`ruff format .`），設定見 `ruff.toml`。
@@ -216,9 +220,20 @@ logger.info(f"發票分析完成：{invoice.id}")
 
 ## 5. 提交前檢查清單
 
-- [ ] `ruff check .` 無錯誤、`ruff format .` 已執行
-- [ ] `pytest` 全部通過
+- [ ] AGENTS.md「無公司密鑰驗證」全部通過（check_project、pytest、ruff check／format --check、environment --check）
 - [ ] 新檔案都有檔頭 docstring，公開函式都有 docstring
 - [ ] 新增的 `TODO` 都有負責人
-- [ ] 異動 Model 時已同步 Schema 備註、異動紀錄、migration
-- [ ] 沒有寫死的密碼、金鑰、網址
+- [ ] 異動 Model 時已同步 Schema 備註、異動紀錄、migration 檔、ADMIN Model 與契約快照
+- [ ] 沒有寫死的密碼、金鑰、網址（三站公開網址集中在 `app/core/constants.py`）
+
+
+## AI 協作與檔案管理補充
+
+- 沿用本專案分層、資料夾及既有 API／Protocol；新增前先尋找同用途檔案，不複製第二套服務入口。
+- 程式放對應 `app/` 分層；測試放 `tests/unit/`；操作腳本放 `scripts/`；文件放 `docs/`。UI 靜態資源及樣板仍遵守本文件與架構文件規則。
+- 暫存、驗收證據放被忽略的 `tmp/` 或專案外；使用者原始檔、密鑰、資料庫匯出與真實發票不得放 `app/static/` 或 Git。
+- 未實作功能保持明確 TODO／`ModuleNotReadyError`；不得以假成功、測試替身或 `APP_ENV=local` 取代登入與授權。
+- ADMIN／API 共用契約及 ORM 的改動需同步，API 是 Schema／Alembic 唯一擁有者；Repository 不 `commit`／`rollback`，交易由 Service 協調。
+- 每次交付執行 `python -B scripts/check_project.py` 與相關無密鑰測試；跨站變更加 `--project-root`。回報實際執行結果及未執行範圍，不將靜態檢查當成雲端連線通過。
+- 契約／分層檢查不是通用密鑰掃描器；不能藉通過檢查就上傳任意檔案或輸出環境變數。
+- 設定來源解析限既有 `app/core/config.py`／`app/core/environment.py`；一般業務模組不得自行讀取 OS 環境或 `.env`。既有經審查的開發橋接及 infrastructure 例外依 `PROJECT_CHECKS.md`，不擴張白名單來掩蓋新違規。
