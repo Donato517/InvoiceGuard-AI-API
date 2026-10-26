@@ -8,6 +8,7 @@ def test_health_returns_ok(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+    assert response.headers["X-InvoiceGuard-Service"] == "InvoiceGuard-AI-API"
 
 
 def test_unknown_route_uses_unified_error_format(client: TestClient) -> None:

@@ -5,7 +5,8 @@
     python -m scripts.run_job sync_einvoice
     python -m scripts.run_job daily_risk_scan
 注意事項：
-    - 會使用 .env 的 DATABASE_URL，執行前確認指向的是哪個資料庫。
+    - 程式預設不讀 .env；未來維運僅在受控雲端使用程序注入的設定。
+    - 本階段只驗證契約與離線單元測試，不執行此腳本。
 """
 
 import argparse

@@ -103,7 +103,12 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def handle_validation_error(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
-        return _error_response(422, "VALIDATION_ERROR", "請求參數格式錯誤", exc.errors())
+        # errors() 的 input / ctx 可能包含密碼、Token 或整段請求，不可回傳。
+        details = [
+            {"loc": error["loc"], "type": error["type"], "msg": "欄位格式錯誤"}
+            for error in exc.errors()
+        ]
+        return _error_response(422, "VALIDATION_ERROR", "請求參數格式錯誤", details)
 
     @app.exception_handler(StarletteHTTPException)
     async def handle_http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse:

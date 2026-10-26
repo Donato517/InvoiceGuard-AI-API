@@ -7,12 +7,16 @@
 """
 
 import hmac
+import logging
 from typing import Annotated
 
 from fastapi import Header
 
 from app.core.config import settings
 from app.core.exceptions import UnauthorizedError
+from app.core.module_errors import ModuleConfigurationError
+
+logger = logging.getLogger(__name__)
 
 
 def verify_cron_secret(authorization: Annotated[str | None, Header()] = None) -> None:
@@ -27,9 +31,17 @@ def verify_cron_secret(authorization: Annotated[str | None, Header()] = None) ->
     Raises:
         UnauthorizedError: 未帶密鑰或密鑰錯誤。
     """
-    expected = f"Bearer {settings.CRON_SECRET}"
+    if settings.is_vercel:
+        try:
+            settings.require_configuration("cron")
+        except ModuleConfigurationError as exc:
+            # Vercel Cron 失敗不會重試；記錄欄位與代碼（不含設定值），否則只能從 401 推測原因
+            logger.warning("Cron 設定驗證失敗，拒絕排程請求：%s", exc)
+            raise UnauthorizedError("排程驗證失敗") from None
+    secret = settings.CRON_SECRET.get_secret_value()
+    expected = f"Bearer {secret}"
     received = authorization or ""
-    if not settings.CRON_SECRET or not hmac.compare_digest(received.encode(), expected.encode()):
+    if not secret or not hmac.compare_digest(received.encode(), expected.encode()):
         raise UnauthorizedError("排程驗證失敗")
 
 

@@ -6,16 +6,20 @@
       （優先使用 DATABASE_URL_UNPOOLED 直連，pooler 不適合執行 DDL）。
     - target_metadata 指向 Base.metadata；新增 Model 後須在 app/db/models/__init__.py 匯入，
       autogenerate 才偵測得到。
+    - 應用程式的 Engine 由 app.db.session 建立；本檔是 Alembic 執行環境，另建 migration Engine，執行需明確授權；
+      但與應用程式 Engine 相同強制 TLS（resolve_ssl_mode），不得降級為明文。
 """
 
 from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
+from sqlalchemy.engine import make_url
 
 from app.core.config import settings
 from app.db import models  # noqa: F401  匯入以註冊所有 Model 到 metadata
 from app.db.base import Base
+from app.db.session import resolve_ssl_mode
 
 config = context.config
 
@@ -41,11 +45,15 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    """連線模式：直接對資料庫執行 migration。"""
+    """連線模式：直接對資料庫執行 migration（強制 TLS 與連線逾時）。"""
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args={
+            "sslmode": resolve_ssl_mode(make_url(settings.migration_database_url)),
+            "connect_timeout": settings.DB_CONNECT_TIMEOUT_SECONDS,
+        },
     )
     with connectable.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)

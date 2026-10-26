@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "contract_version": "1.0",
+  "shared": {
+    "app/core/environment.py": "e42fd59fe0fb185f5d68673456986063eb70327f5ca3d06af9b06833d4d97ea6"
+  },
+  "backend": {
+    "app/integrations/storage_client.py": "6bb743aa143c046a2ec949e8129a54b6b47df9c41d6d760767b8228e719d0847",
+    "app/db/session.py": "f0e70a400583f69afc85b146faf46b728f8a9a4af194893c73d3061c3bf85343",
+    "app/db/contracts.py": "28c432ba8fcfc5f90b1016c785b5d21ce53312e1ec15824c8202f77f3184f483",
+    "app/schemas/files.py": "c7b8b5fe5cdb2dcb3dd1b9be1ad532a03d10f53265377b8061c7eb678ca6b19d",
+    "app/schemas/data.py": "2f7ad6a1b23f4c48e45f3cc16b32d1b264ed34ca4ffb8713b5e360bfa524e27b",
+    "app/services/data_service.py": "56a0793cdafd492f1494355e7e831433d48e6772c6ba2e90e3974d6a290adf9f",
+    "app/services/file_service.py": "4db918c3a44d30631033710cad68974e42f77abf06d12d2a5e1e32aa4ada0a74"
+  },
+  "models": {
+    "app/db/base.py": "75e60c522cf1f1446349edb80a77466ac1c52647949a69da0104c8722db5d431",
+    "app/db/models/__init__.py": "d69b8ad864d931417e47e23c66c92e25646cde6671be5796deebe87155cc7380",
+    "app/db/models/user.py": "6163c7c02b459a79395b405f7776f4e8ba8d8d1016dfa9c78f6803e88827b493",
+    "app/db/models/invoice.py": "87df204975ea39a3b320a54aef3331653407d3386c420965d9a1e2a7fb2c9f1a",
+    "app/db/models/audit_log.py": "ce9b159c4daf00456b54fb801839e0cbac649944a0e59a40d9d4ef71d1f599c1",
+    "app/db/models/job_run.py": "a869b421a4961216cd5cfac300b5121e85e311298e3b79dfa6ba6fe73f5da4c5"
+  },
+  "common": "ca595b3e16799ebe64b7799ff74c2f8bb3f141370c051a24dd7c26860c33fb14",
+  "platform": "8b5fa32abe67b2bdb9eeb27cdc4fd7cdabd9f9e59d2c067253e318e3910795ab",
+  "agent_rules_sha256": "a617e5f6713d622dc03d3ef86a3c817a0dd3877b9d35219f704aa72f5546a6f7"
+}

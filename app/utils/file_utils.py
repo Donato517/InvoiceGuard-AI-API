@@ -3,7 +3,8 @@
 功能說明：暫存檔處理工具。所有暫存檔都必須透過本模組建立，確保放在正確位置且用完即刪。
 注意事項：
     - 暫存目錄由 settings.temp_dir 決定：Vercel 上為 /tmp/invoiceguard，本機為專案內 tmp/。
-    - Vercel 的 /tmp 不保證跨請求存在，不可用來保存需要留存的檔案（改用 storage_client）。
+    - Vercel 的 /tmp 不保證跨請求存在，不可用來保存需要留存的檔案：ADMIN／API 改用 Vercel 模組
+      app.integrations.supabase_storage；前台沒有 Storage，檔案交給 API。
 """
 
 from collections.abc import Iterator
