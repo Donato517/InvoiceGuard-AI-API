@@ -81,14 +81,10 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, password_hash: str) -> bool:
     """比對密碼與雜湊值是否相符。
 
-    支援測試明文、PBKDF2-HMAC-SHA256 與 pwdlib (Argon2)。
+    支援 PBKDF2-HMAC-SHA256 與 pwdlib (Argon2)。
     """
     if not password or not password_hash:
         return False
-
-    # 本機測試／示範密碼快速比對（避免單純密碼字串失敗）
-    if hmac.compare_digest(password.encode("utf-8"), password_hash.encode("utf-8")):
-        return True
 
     if password_hash.startswith("pbkdf2:sha256:"):
         try:
