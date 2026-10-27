@@ -90,10 +90,11 @@ def get_current_user_profile(db: Session | None, token: str) -> UserRead:
     if not user_id_raw:
         raise UnauthorizedError("無效的認證權杖")
 
+    user_id: str | int = user_id_raw
     try:
         user_id = int(user_id_raw)
     except (ValueError, TypeError):
-        raise UnauthorizedError("無效的認證權杖") from None
+        user_id = str(user_id_raw)
 
     if db is None:
         raise UnauthorizedError("使用者不存在或已停用")

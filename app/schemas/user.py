@@ -9,13 +9,13 @@ from datetime import datetime
 
 from pydantic import Field
 
-from app.schemas.common import ContractModel, RecordId
+from app.schemas.common import ContractModel
 
 
 class UserRead(ContractModel):
     """使用者讀取回應模型（禁止包含 password_hash 等敏感欄位）。"""
 
-    id: RecordId = Field(description="使用者 ID")
+    id: str | int = Field(description="使用者 ID")
     email: str = Field(description="電子郵件")
     display_name: str = Field(description="顯示名稱")
     role: str = Field(description="角色：user / admin")
