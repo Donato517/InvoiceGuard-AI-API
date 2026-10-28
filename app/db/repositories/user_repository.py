@@ -7,6 +7,7 @@
     - email 查詢前一律轉小寫，與寫入規則一致。
 """
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -16,6 +17,8 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.db.models.user import User, UserRole
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -85,6 +88,18 @@ def get_by_id(db: Session, user_id: str | int | UUID) -> User | UserRecord | Non
         return None
 
 
+def _log_identity_failure(action: str, exc: Exception) -> None:
+    """記錄身分表查詢失敗原因（只含例外類別與 SQLSTATE，不含 SQL 參數或連線字串）。"""
+    orig = getattr(exc, "orig", None)
+    logger.warning(
+        "身分表查詢失敗（%s）：%s sqlstate=%s detail=%s",
+        action,
+        type(exc).__name__,
+        getattr(orig, "sqlstate", None),
+        str(orig).splitlines()[0] if orig is not None else None,
+    )
+
+
 def get_by_email(db: Session, email: str) -> User | UserRecord | None:
     """依 email 取得使用者（不分大小寫）；不存在或已軟刪除時回傳 None。"""
     normalized = email.strip().lower()
@@ -93,8 +108,9 @@ def get_by_email(db: Session, email: str) -> User | UserRecord | None:
         row = db.execute(sql, {"email": normalized}).fetchone()
         if row is not None:
             return _from_row(row)
-    except Exception:
-        pass
+        logger.info("身分表查無此 email（account 不存在）")
+    except Exception as exc:
+        _log_identity_failure("get_by_email", exc)
 
     try:
         return db.scalar(select(User).where(User.email == normalized, User.deleted_at.is_(None)))
@@ -124,16 +140,11 @@ def create(
 
 
 def update_last_login(db: Session, user: Any) -> None:
-    """更新最後登入時間（不自行 commit）。"""
-    now = datetime.now(UTC)
-    user.last_login_at = now
+    """更新最後登入時間（不自行 commit）。
+
+    雲端身分帳號（invoiceguard_identity.user_accounts）不在此寫入：本機 API 連的是正式 DB，
+    AGENTS.md 規定未經明確授權不得修改正式資料；待核定寫入欄位與授權後再補。
+    """
     if getattr(user, "_is_identity", False) or isinstance(getattr(user, "id", None), (str, UUID)):
-        try:
-            sql = text("""
-                UPDATE invoiceguard_identity.user_accounts
-                SET last_login_at = :now, failed_login_count = 0
-                WHERE user_id = :user_id
-            """)
-            db.execute(sql, {"now": now, "user_id": str(user.id)})
-        except Exception:
-            pass
+        return
+    user.last_login_at = datetime.now(UTC)
