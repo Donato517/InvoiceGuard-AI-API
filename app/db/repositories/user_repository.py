@@ -1,150 +1,90 @@
 """
 模組名稱：app.db.repositories.user_repository
-功能說明：使用者資料存取（優先支援雲端 invoiceguard_identity.user_accounts，若無則支援 ORM users 表）。
+功能說明：登入用的帳號資料存取——invoiceguard_identity.user_accounts、public.user_profiles
+    與 public.v_user_departments（v1.3；帳號與部門關聯由 ADMIN /accounts 維護）。
 注意事項：
+    - 資料表依 v1.3，本站尚無對應 ORM Model，以固定 SQL 存取，值一律綁定參數
+      （與 ADMIN user_account_repository 相同做法）；不讀寫舊 ORM 的 public.users。
     - 只負責資料存取，不含商業邏輯，不自行 commit（交易由 service 控制）。
-    - 查詢預設排除停用或軟刪除資料。
-    - email 查詢前一律轉小寫，與寫入規則一致。
+    - password_hash 只供 service 驗證密碼，不得回傳、記錄或輸出。
+    - email 須由呼叫端先 strip／lower（DB CHECK 要求已正規化）。
 """
 
-import logging
-from dataclasses import dataclass
-from datetime import UTC, datetime
-from typing import Any
+from dataclasses import dataclass, field
 from uuid import UUID
 
-from sqlalchemy import select, text
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.db.models.user import User, UserRole
+SELECT_LOGIN_ACCOUNT = text("""
+    SELECT a.user_id, a.email, a.password_hash, a.account_status, a.credential_version,
+           (a.locked_until IS NOT NULL AND a.locked_until > now()) AS is_locked,
+           p.display_name,
+           (p.user_id IS NOT NULL AND p.is_active AND p.resigned_at IS NULL) AS profile_active
+    FROM invoiceguard_identity.user_accounts AS a
+    LEFT JOIN public.user_profiles AS p ON p.user_id = a.user_id
+    WHERE a.email = :email
+""")
+# v_user_departments 只列 active 帳號、啟用未離職 profile 的現行且啟用部門；is_primary 由主要部門推導
+SELECT_DEPARTMENTS = text("""
+    SELECT department_id, department_code, department_name, is_primary
+    FROM public.v_user_departments
+    WHERE user_id = :user_id
+    ORDER BY is_primary DESC, department_code
+""")
+RECORD_LOGIN_SUCCESS = text("""
+    UPDATE invoiceguard_identity.user_accounts
+    SET last_login_at = now(), failed_login_count = 0
+    WHERE user_id = :user_id
+""")
+RECORD_LOGIN_FAILURE = text("""
+    UPDATE invoiceguard_identity.user_accounts
+    SET failed_login_count = failed_login_count + 1
+    WHERE user_id = :user_id
+""")
 
-logger = logging.getLogger(__name__)
 
+@dataclass(frozen=True)
+class LoginAccount:
+    """登入驗證所需的帳號欄位；password_hash 不得離開 service。"""
 
-@dataclass
-class UserRecord:
-    """統一封裝雲端帳號結構之使用者物件。"""
-
-    id: str | int
+    user_id: UUID
     email: str
-    password_hash: str
-    display_name: str
-    role: str
-    is_active: bool
-    last_login_at: datetime | None = None
-    _is_identity: bool = True
+    password_hash: str = field(repr=False)
+    account_status: str
+    credential_version: int
+    is_locked: bool
+    display_name: str | None
+    profile_active: bool
 
 
-_IDENTITY_SELECT = """
-    SELECT
-        a.user_id,
-        a.email,
-        a.password_hash,
-        COALESCE(p.display_name, split_part(a.email, '@', 1)) AS display_name,
-        CASE
-            WHEN EXISTS (
-                SELECT 1 FROM public.user_departments ud
-                JOIN public.departments d ON ud.department_id = d.department_id
-                WHERE ud.user_id = a.user_id AND d.department_code IN ('administration_d', 'technology_d')
-            ) THEN 'admin'
-            ELSE 'user'
-        END AS role,
-        (a.account_status = 'active' AND COALESCE(p.is_active, true)) AS is_active,
-        a.last_login_at
-    FROM invoiceguard_identity.user_accounts a
-    LEFT JOIN public.user_profiles p ON a.user_id = p.user_id
-"""
+@dataclass(frozen=True)
+class DepartmentRow:
+    """使用者目前所屬且啟用的部門。"""
+
+    department_id: UUID
+    department_code: str
+    department_name: str
+    is_primary: bool
 
 
-def _from_row(row: Any) -> UserRecord:
-    return UserRecord(
-        id=str(row[0]),
-        email=str(row[1]),
-        password_hash=str(row[2]),
-        display_name=str(row[3]),
-        role=str(row[4]),
-        is_active=bool(row[5]),
-        last_login_at=row[6],
-        _is_identity=True,
-    )
+def get_login_account(db: Session, email: str) -> LoginAccount | None:
+    """依已正規化的 email 取得登入驗證所需欄位；不存在時回傳 None。"""
+    row = db.execute(SELECT_LOGIN_ACCOUNT, {"email": email}).mappings().one_or_none()
+    return LoginAccount(**row) if row else None
 
 
-def get_by_id(db: Session, user_id: str | int | UUID) -> User | UserRecord | None:
-    """依主鍵取得使用者；不存在或已軟刪除時回傳 None。"""
-    try:
-        uuid_str = str(user_id)
-        UUID(uuid_str)
-        sql = text(f"{_IDENTITY_SELECT} WHERE a.user_id = :user_id")
-        row = db.execute(sql, {"user_id": uuid_str}).fetchone()
-        if row is not None:
-            return _from_row(row)
-    except Exception:
-        pass
-
-    try:
-        int_id = int(user_id)
-        return db.scalar(select(User).where(User.id == int_id, User.deleted_at.is_(None)))
-    except Exception:
-        return None
+def list_departments(db: Session, user_id: UUID) -> list[DepartmentRow]:
+    """列出使用者目前所屬且啟用的部門，主要部門排第一；帳號或 profile 不可用時為空。"""
+    rows = db.execute(SELECT_DEPARTMENTS, {"user_id": user_id}).mappings()
+    return [DepartmentRow(**row) for row in rows]
 
 
-def _log_identity_failure(action: str, exc: Exception) -> None:
-    """記錄身分表查詢失敗原因（只含例外類別與 SQLSTATE，不含 SQL 參數或連線字串）。"""
-    orig = getattr(exc, "orig", None)
-    logger.warning(
-        "身分表查詢失敗（%s）：%s sqlstate=%s detail=%s",
-        action,
-        type(exc).__name__,
-        getattr(orig, "sqlstate", None),
-        str(orig).splitlines()[0] if orig is not None else None,
-    )
+def record_login_success(db: Session, user_id: UUID) -> None:
+    """登入成功：記錄 last_login_at 並將 failed_login_count 歸零（不提交交易）。"""
+    db.execute(RECORD_LOGIN_SUCCESS, {"user_id": user_id})
 
 
-def get_by_email(db: Session, email: str) -> User | UserRecord | None:
-    """依 email 取得使用者（不分大小寫）；不存在或已軟刪除時回傳 None。"""
-    normalized = email.strip().lower()
-    try:
-        sql = text(f"{_IDENTITY_SELECT} WHERE LOWER(a.email) = :email")
-        row = db.execute(sql, {"email": normalized}).fetchone()
-        if row is not None:
-            return _from_row(row)
-        logger.info("身分表查無此 email（account 不存在）")
-    except Exception as exc:
-        _log_identity_failure("get_by_email", exc)
-
-    try:
-        return db.scalar(select(User).where(User.email == normalized, User.deleted_at.is_(None)))
-    except Exception:
-        return None
-
-
-def create(
-    db: Session,
-    *,
-    email: str,
-    password_hash: str,
-    display_name: str,
-    role: str = UserRole.USER.value,
-) -> User:
-    """建立新使用者（不自行 commit）。"""
-    user = User(
-        email=email.strip().lower(),
-        password_hash=password_hash,
-        display_name=display_name.strip(),
-        role=role,
-        is_active=True,
-    )
-    db.add(user)
-    db.flush()
-    return user
-
-
-def update_last_login(db: Session, user: Any) -> None:
-    """更新最後登入時間（不自行 commit）。
-
-    雲端身分帳號（invoiceguard_identity.user_accounts）不在此寫入：本機 API 連的是正式 DB，
-    AGENTS.md 規定未經明確授權不得修改正式資料；待核定寫入欄位與授權後再補。
-    """
-    if getattr(user, "_is_identity", False) or isinstance(getattr(user, "id", None), (str, UUID)):
-        return
-    user.last_login_at = datetime.now(UTC)
+def record_login_failure(db: Session, user_id: UUID) -> None:
+    """密碼錯誤：failed_login_count 加 1（只記錄，不鎖定；不提交交易）。"""
+    db.execute(RECORD_LOGIN_FAILURE, {"user_id": user_id})

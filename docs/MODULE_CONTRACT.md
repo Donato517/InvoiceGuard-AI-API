@@ -15,12 +15,16 @@ AI 入口見 [AGENTS.md](../AGENTS.md)／[CLAUDE.md](../CLAUDE.md)；
 | `check_configuration()` / CLI | 已實作靜態檢查，不連網 |
 | DB Engine 參數與 Session 關閉 | 已實作設定保護；2026-10-25 實測 SELECT 1（見 DEVELOPMENT_STATUS） |
 | 檔案與發票 CRUD DTO / Protocol | 已定義，不能直接操作真實資料 |
+| 手機上傳發票 | 已實作（2026-10-29）：`app/schemas/invoice_upload.py`、`services/invoice_upload_service.py`、`db/repositories/invoice_repository.py`／`recognition_repository.py`（v1.4 固定 SQL），不經 DataService／FileService；部門功能權限尚未接線 |
 | 第一階段契約：Storage / FileService / DataService 工廠 | 尚未接線，拋出 ModuleNotReadyError，不假裝成功 |
 | 既有 Cron 驗證 | 保留 hmac.compare_digest；SecretStr 只在內部解封，沒有密鑰時仍拒絕 |
 | 422 驗證錯誤 | 不回傳 input / ctx，不反射原始機密值 |
-| JWT 使用者登入、部門權限 | 尚未實作；CRON_SECRET 不能當使用者登入憑證 |
+| 前台登入、部門權限 | 登入／目前登入者／登出已改用 v1.3 Session（見 DEVELOPMENT_STATUS）；部門功能權限尚未實作；CRON_SECRET 不能當使用者登入憑證 |
 | Vercel 模組（檔案存取） | `integrations/supabase_storage.py`：上傳、下載、列表、移動、刪除 |
-| 真實 CRUD、業務檔案端點 | 尚未實作，沒有可寫入業務資料的 HTTP 端點 |
+| Google Document AI 模組（OCR） | `integrations/document_ai.py`：`DocumentAIClient.from_settings().process(content, mime_type, timeout_seconds=None)` 回傳全文、各頁各行文字／信心值／正規化位置框與原始回應；`describe_processor()` 唯讀查 Processor。服務帳號換權杖並在程序內暫存；錯誤為 `document_ai_*` 固定代碼。不寫 DB |
+| Groq 模組（對話） | `integrations/groq.py`：`GroqClient.from_settings().chat(messages, system_instruction=None, purpose="default", advanced=False, json_output=False, max_tokens=None, timeout_seconds=None)`；`timeout_seconds` 為呼叫端剩餘時間，不超過預設 45 秒，0 以下直接回 `groq_timeout`。情境：default／recognition 用 `GROQ_DEFAULT_MODEL`（gpt-oss-20b），`advanced=True` 改用 `GROQ_ADVANCED_MODEL`（gpt-oss-120b，進階備用）；rag／discussion 用 120B。`json_output` 要求只回 JSON 物件；回答不含推理過程；錯誤為 `groq_*` 固定代碼。不寫 DB |
+| Google Gemini 模組（對話） | `integrations/gemini.py`：`GeminiClient.from_settings().chat(messages, system_instruction=None)` 回傳回答、模型、結束原因與 token 用量；Key 只放標頭；模型由 `GEMINI_MODEL` 設定；錯誤為 `gemini_*` 固定代碼（Google status 優先於 HTTP 狀態碼）。不寫 DB |
+| 真實 CRUD、業務檔案端點 | 一般 CRUD（發票列表／詳情等）尚未實作；目前會寫入業務資料的 HTTP 端點只有手機上傳發票（`POST /api/v1/invoices/recognize`、`POST /api/v1/invoices`） |
 | StoredFile 表、發票 version 欄位 | 尚未建立，API 後續統一規劃 Schema；ADMIN 同步 |
 
 第一階段未變更 ORM 模型與 migration 版本。
@@ -72,9 +76,13 @@ from app.services.file_service import FileService, get_file_service
 | SUPABASE_SECRET_KEY | 第一階段 storage 設定檢查要求的機密；S3StorageClient 不讀此欄位，使用 S3_ACCESS_KEY_ID／S3_SECRET_ACCESS_KEY |
 | S3_ENDPOINT_URL / S3_REGION | Supabase S3 相容端點與區域；`integrations/supabase_storage.py` 使用。本機由 START 注入（2026-10-25 核定例外） |
 | S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY | Supabase S3 金鑰；本機由 START 注入，不在本機機密拒絕清單。`check_configuration("storage")` 仍驗證 SUPABASE_URL／SUPABASE_STORAGE_BUCKET／SUPABASE_SECRET_KEY，不驗證 S3_*；這是第一階段靜態檢查，不是另一個 Storage 模組 |
-| JWT_SECRET_KEY / JWT_EXPIRE_MINUTES | auth 能力驗證：至少 32 字元／1–1440 分鐘，預設 60；JWT 使用者登入仍是 TODO |
+| SESSION_EXPIRE_MINUTES | auth 能力驗證：1–1440 分鐘，預設 60；登入用 v1.3 Session，不需簽章金鑰（JWT_SECRET_KEY 不再使用） |
 | CRON_SECRET | cron 能力：至少 16 字元；本機模式也不略過請求驗證 |
-| GEMINI_API_KEY / OPENAI_API_KEY | 雲端選填；模型服務尚未串接 |
+| GOOGLE_CLOUD_PROJECT_ID、GOOGLE_CLOUD_LOCATION、DOCUMENT_AI_PROCESSOR_ID、GOOGLE_SERVICE_ACCOUNT_JSON、GEMINI_API_KEY | Gemini 與 Document AI 設定；本機由 START 注入（2026-10-28 核定，不視為本機禁用機密，見 Settings.LOCAL_INJECTED_FIELDS）；`integrations/document_ai.py`／`gemini.py` 使用，建立用戶端時檢查格式（未新增 check_configuration 範圍） |
+| GROQ_API_KEY | Groq 金鑰；`integrations/groq.py` 使用。列入 LOCAL_INJECTED_FIELDS；本機由 START 注入（2026-10-28 核定） |
+| GROQ_DEFAULT_MODEL／GROQ_ADVANCED_MODEL | Groq 預設模型 openai/gpt-oss-20b、進階模型 openai/gpt-oss-120b（不是機密） |
+| GEMINI_MODEL | Gemini 對話模型名稱，不是機密；預設 gemini-3.8-flash（gemini-2.5-flash 已不開放給新專案） |
+| OPENAI_API_KEY | 雲端選填；模型服務尚未串接 |
 | AI_API_KEY / EINVOICE_APP_ID / EINVOICE_API_KEY / BLOB_READ_WRITE_TOKEN | 保留既有名稱並遮罩，未啟用的整合不要求填寫 |
 | VERCEL | 平台自動標記，不是認證憑證，不得用來保護公開 API |
 
@@ -157,7 +165,7 @@ Windows AppContainer 可能阻擋程序內 socketpair；請在一般 PowerShell 
 
 ## 待完成
 
-依序完成使用者授權（JWT）、共用 Schema、Repository / Service、第一階段契約（DataService／FileService）接線與受控 JSON 端點。
+Google Document AI／Gemini／Groq 的業務流程（上傳辨識、欄位整理、ai_recognition_logs、知識庫問答）尚未實作。依序完成部門功能權限、共用 Schema、Repository / Service、第一階段契約（DataService／FileService）接線與受控 JSON 端點。
 須另驗證跨使用者／部門拒絕、版本衝突、檔案內容、稽核與補償。
 部署、migration、seed 與正式資料寫入需使用者明確授權。
 

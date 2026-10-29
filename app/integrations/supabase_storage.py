@@ -10,6 +10,8 @@
 注意事項：
     - 示範（/dev/files）與正式功能都使用此模組；ADMIN 與 API 的本檔內容相同，修改時兩站同步。
     - 設定來自 S3_ENDPOINT_URL、S3_REGION、S3_ACCESS_KEY_ID、S3_SECRET_ACCESS_KEY、SUPABASE_STORAGE_BUCKET。
+    - 不同業務各用自己的 bucket（例如發票用 invoices、RAG 用自己的私有 bucket）：from_settings(bucket=...)
+      指定；未指定時沿用 SUPABASE_STORAGE_BUCKET。
     - 物件鍵由上層服務產生；HTTP／連線錯誤轉成固定代碼，只附 S3 錯誤代碼（如 NoSuchKey），不含金鑰、簽章或網址。
 """
 
@@ -154,8 +156,10 @@ class S3StorageClient:
         self._opener = opener or urllib.request.build_opener(_NoRedirect)
 
     @classmethod
-    def from_settings(cls, configuration: Settings | None = None) -> "S3StorageClient":
-        """以 S3_* 與 SUPABASE_STORAGE_BUCKET 建立用戶端。
+    def from_settings(
+        cls, configuration: Settings | None = None, *, bucket: str | None = None
+    ) -> "S3StorageClient":
+        """以 S3_* 建立用戶端；bucket 未指定時使用 SUPABASE_STORAGE_BUCKET。
 
         Raises:
             StorageError: storage_not_configured——端點 scheme 不是 https、缺少 hostname、含非空的
@@ -168,7 +172,7 @@ class S3StorageClient:
             region=configuration.S3_REGION,
             access_key_id=configuration.S3_ACCESS_KEY_ID.get_secret_value(),
             secret_access_key=configuration.S3_SECRET_ACCESS_KEY.get_secret_value(),
-            bucket=configuration.SUPABASE_STORAGE_BUCKET,
+            bucket=bucket if bucket is not None else configuration.SUPABASE_STORAGE_BUCKET,
         )
 
     def put(self, key: str, data: bytes, *, content_type: str) -> None:

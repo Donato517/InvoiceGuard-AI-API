@@ -900,3 +900,78 @@ STARTUP 42 筆清單只在讀取時處理 CRLF 並核對路徑與雜湊，原檔
 - invoice-guard-ai-api 的 DATABASE_URL 已與 ADMIN 專案相同（無括號）；六個變數皆可讀取，S3／Bucket 與 ADMIN 相同。
 - API venv 以 START 相同方式取得的 API 專案值：本機環境檢查通過、`import app.main` 成功、DB 模組 SELECT 1 = 1；Storage 上傳、列表、下載（位元組相同）、移動、刪除成功，測試檔已刪除。
 - 真 `START.cmd --no-browser --run-seconds 30` exit 0：ADMIN 與 API 各自從自己的 Vercel 專案取得 DB／Storage 設定；執行中 ADMIN `/health`、`/dev/accounts`、`/dev/files` 200，API `/health` 200（env=local）。全程唯讀 DB，未寫入正式資料。
+
+## 2026-10-28 Claude：Google Document AI／Gemini 模組實測
+
+使用者授權各實際呼叫一次。以 START 的 fetch_vercel_environment 取得 invoice-guard-ai-api Production 設定、api_runtime_values 注入獨立 API 子程序（與 START 相同），只輸出摘要，不輸出金鑰。
+
+| 項目 | 結果 |
+|---|---|
+| Document AI `describe_processor()` | OCR_PROCESSOR／ENABLED，預設版本 pretrained-ocr-v2.1-2024-08-07 |
+| Document AI `process()`（前台 `app/static/img/reference_invoice.jpg`，969×595 JPEG） | 成功：1 頁、29 行、全文 200 字、平均信心 0.915；前幾行含「TL 28281500」「買受人:」「統一編號:」「一發票(三聯式)」「一〇八年九、十月份」 |
+| Gemini（gemini-2.5-flash） | 404 NOT_FOUND：該模型已不開放給新使用者（未產生內容） |
+| Gemini 免費確認（models.get、countTokens） | gemini-2.5-flash／gemini-3.8-flash 皆支援 generateContent；gemini-3.8-flash 的 countTokens 200 |
+| Gemini（gemini-3.8-flash）`chat()` | 402 RESOURCE_EXHAUSTED：「Your prepayment credits are depleted」，AI Studio 預付額度用完（未產生內容）；模組當時歸為 gemini_failed，已改為 gemini_quota_exceeded |
+
+結論：Document AI 模組端到端可用。Gemini 模組的 Key、模型與請求格式正確，對話成功回應尚未取得，需使用者在 AI Studio 儲值後再驗證一次。共送出 Document AI 辨識 1 次、Gemini generateContent 3 次（皆被拒、未產生內容）；未部署、未寫 DB、未重啟使用者的 START。
+- 2026-10-28 使用者更換 Vercel 的 GEMINI_API_KEY 後重測：`chat()` 回 gemini_auth_failed（INVALID_ARGUMENT/API_KEY_INVALID），免費的列模型同樣 400 API_KEY_INVALID。唯讀格式檢查：新值 26 字元、無空白或引號，形式為 `gen-lang-client-<10 位數字>`（Google Cloud 專案 ID 的格式，且不同於 GOOGLE_CLOUD_PROJECT_ID），不是 API Key。需改填 AI Studio「API Keys」頁的金鑰字串。本次未產生內容、未計費。
+- 2026-10-28 使用者新增 GEMINI_PROJECT_ID 後重測：GEMINI_API_KEY 與 GEMINI_PROJECT_ID 是同一個值（專案 ID `gen-lang-client-0026747147`），免費的列模型仍回 400 API_KEY_INVALID，所以沒有送出對話請求。Gemini API 以 API Key 驗證，專案 ID 不是憑證；程式不讀 GEMINI_PROJECT_ID，START 也不注入。GEMINI_API_KEY 須改填 AI Studio「API Keys」頁該專案的金鑰字串。
+- 2026-10-28 使用者更正 GEMINI_API_KEY 後重測：新值為 `AQ.` 開頭 53 字元的金鑰，免費列模型 200（Key 有效）。`chat()` 回 gemini_quota_exceeded（RESOURCE_EXHAUSTED，分類正確）；診斷請求確認為 HTTP 402「Your prepayment credits are depleted」，此 Key 所屬專案的預付額度為 0。未產生內容、未計費；需在 AI Studio 為該專案儲值後再驗證。
+
+## 2026-10-28 Claude：GROQ_API_KEY 實測
+
+- Vercel：GROQ_API_KEY 為 Config 類型，設在 invoice-guard-ai-api 與 invoice-guard-ai-admin 的 Production。以 `vercel env run --project invoice-guard-ai-api` 讀取，只輸出摘要。
+- Key：`gsk_` 開頭 56 字元、無前後空白；免費列模型 200，`qwen/qwen3.8-27b` 可用。
+- 依使用者範例送出一次 chat.completions（`https://api.groq.com/openai/v1`、model qwen/qwen3.8-27b、system＋user、max_tokens 200）。API venv 沒有 openai 套件，改以既有 httpx 送出相同的 OpenAI 相容請求：200，回答「收到，API 測試成功。」，finish_reason stop，tokens 39＋8＝47，未附思考內容。
+- 只做連線實測，尚未加入 API 模組、設定欄位或 START 注入；本機 START 目前不注入 GROQ_API_KEY。
+
+## 2026-10-28 Claude：Document AI OCR → Groq gpt-oss-20b 發票 JSON 實測
+
+以 `vercel env run --project invoice-guard-ai-api` 執行（Production 設定只在該次程序），只輸出摘要。
+
+| 步驟 | 結果 |
+|---|---|
+| Document AI `process()`（前台 reference_invoice.jpg，空白三聯式樣張） | 1 頁、29 行、200 字、平均信心 0.915 |
+| Groq `chat(purpose="recognition", json_output=True)` | 實際模型 openai/gpt-oss-20b，finish stop，tokens 718＋776＝1494 |
+| 回傳內容 | 合法 JSON，欄位齊全（v1.3 invoices／invoice_items 欄位名）：is_triplicate true、invoice_track TL、invoice_number 28281500 正確；樣張空白欄位皆為 null、items 為空陣列；tax_period 回 202109，錯誤（「一〇八年九、十月份」應為 201909） |
+
+結論：OCR → 20B 的 JSON 串接可用；民國年換算等需由程式驗證。樣張沒有填寫內容，尚未以實際開立的發票驗證金額與品項擷取。
+
+## 2026-10-29 Claude：以 START 環境測試圖片與 AI 對話
+
+- 以新版 SETUP.cmd 執行 `--reuse --skip-tools`（exit 0，STARTUP 內未新增檔案），安裝含 Groq 注入的 START runtime（runtime-c4896626…，與 repo launcher 相同）。用該 runtime 的 fetch_vercel_environment／api_runtime_values 取值，與 START 相同注入 API 子程序（12 項含 GROQ_API_KEY；APP_ENV=local，環境檢查有效）。只輸出摘要。
+- 圖片：Document AI OCR（reference_invoice.jpg）1 頁、29 行、平均信心 0.915 → gpt-oss-20b（recognition、JSON 模式）1353 tokens：合法 JSON，字軌 TL、號碼 28281500、三聯式正確，tax_period 這次為 201909（前次同輸入回 202109），模型輸出前後不一致，民國年換算仍需程式驗證。
+- AI 對話：default → gpt-oss-20b，273 tokens，回答通順；discussion → gpt-oss-120b，284 tokens，條列三點，但內容為一般性敘述，未對應營業稅法規定的不得扣抵項目，法規問答需以知識庫（RAG）內容為依據。
+- 未啟動 START 的服務視窗與 Tunnel；Gemini 因預付額度為 0 未測。
+
+## 2026-10-29 Claude：手機上傳發票（辨識、查重、送出）
+
+- 範圍：`POST /api/v1/invoices/recognize`、`/check-duplicate`、`POST /api/v1/invoices`；新增 schemas/invoice_upload.py、services/invoice_upload_service.py、repositories/invoice_repository.py（取代 TODO）、recognition_repository.py、utils/invoice_format.py；requirements 加入 python-multipart==0.0.32（與前台、ADMIN 同版）；supabase_storage.from_settings 增加 bucket 參數（ADMIN 同步）。
+- 離線測試 tests/unit/test_invoice_upload.py 50 案（repository、Storage、Document AI、Groq 皆為替身）：存圖鍵格式與台灣時間、欄位換算、PNG、無效／過大影像不寫資料、未登入／Session 失效、20B 失敗改 120B、Key 被拒不重試、OCR／Storage 失敗記 failed、無文字、模型未設定時不寫資料、檢核提醒、逾時影像清理與刪除失敗、查重、送出建立各表與差異、重複、逾時／已送出／未完成／非本人、請求格式驗證、日期／期別／金額／統編工具。
+- repository 的 14 段 SQL 以 pglast（PostgreSQL 解析器）解析通過；未在資料庫執行。
+- 驗證：check_project 單站與 --project-root PASS；pytest 652 passed、14 skipped；ruff check／format --check 通過。
+- 未驗證：正式 DB／Storage／Document AI／Groq 的實際寫入與呼叫（需使用者以手機經 START 測試，會寫入正式資料）；Vercel 部署後的逾時與請求大小。
+
+## 2026-10-29 Claude：Codex 檢驗修正＋使用者修改欄位標記
+
+- tests/unit/test_invoice_upload.py 由 50 案增為 95 案：可選欄位 null／空白、修改紀錄（中間修改、順序、不一致的 7 種情形）、明細來源（依 source_line_no 比對、新增、刪除、重複／不存在）、與前台同形的修改紀錄、前後台比對規則 17 案、異常辨識值、後處理失敗、NaN 信心值、時限與備援、四捨五入。
+- 驗證：check_project（單站與 --project-root）PASS；pytest 697 passed、14 skipped；ruff check／format --check、environment --check 通過。
+- 未驗證：正式 DB／Storage／Document AI／Groq 實際寫入與呼叫；SQL 仍只做解析與靜態對照。
+
+## 2026-10-29 Claude：Codex 第二輪檢驗修正
+
+- 新增：Document AI 截止時間涵蓋換發權杖（2 案）；比對案例 7 案、高精度中間修改、501 筆修改紀錄。另以 node 對照前台 canonicalValue 17,325 組，差異 0（臨時腳本，不列入 pytest，因 CI 不保證有 node）。
+- 驗證：check_project（單站與 --project-root）PASS；pytest 708 passed、14 skipped；ruff check／format --check、environment --check 通過。
+- 未驗證：正式服務實際呼叫與寫入。
+
+## 2026-10-29 Claude：辨識支援單頁 PDF（電腦上傳頁）
+
+- 範圍：`invoice_format.INVOICE_FILE_EXTENSIONS` 加入 application/pdf（Storage 檔名 .pdf，與 invoice_files.mime_type 的 CHECK 一致）；`invoice_upload_service` 以檔頭 `%PDF-` 判斷、上限仍 4 MB，Document AI 回傳超過一頁時記 failed 並回 400 INVOICE_PDF_MULTIPAGE（不呼叫模型）；送出時 invoice_files.mime_type 為 application/pdf。影像流程不變。
+- 測試：單頁 PDF 辨識、多頁 PDF 拒絕、影像不受頁數判斷影響、PDF 送出寫入 PDF 檔資訊、宣告類型不符、GIF、PDF 過大、Storage 鍵 .pdf。
+- 驗證：check_project（單站與 --project-root）PASS；pytest 714 passed、14 skipped；ruff check／format --check、environment --check 通過。
+- 未驗證：Document AI 對真實掃描 PDF 的辨識結果；正式 Storage／DB 寫入。
+
+## 2026-10-29 Claude：ADMIN 使用同版 AI 模組（API 端配合）
+
+- API 程式未修改；新增 tests/unit/test_shared_integrations.py（與 ADMIN 相同）：supabase_storage.py 與四個 AI 模組檔在兩站同目錄時逐位元組比對，單站 checkout 時 skip。共同規範（三站 AGENTS 共同區塊）改為 ADMIN 與 API 都由 START 注入 AI 設定，agent_rules_sha256 三站同步。
+- 驗證：check_project（--project-root）PASS；pytest 726 passed、14 skipped；ruff、environment --check 通過。

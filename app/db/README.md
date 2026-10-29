@@ -6,14 +6,18 @@ AI 先讀根目錄 [AGENTS.md](../../AGENTS.md)／[CLAUDE.md](../../CLAUDE.md)�
 此文件的部署與 migration 流程只是管理者維運參考，並非當前任務授權。
 本機的 DATABASE_URL 只由 START 注入程序記憶體（2026-10-25 核定，連正式 DB）；不得下載連線字串或寫入檔案。
 
-> 本資料夾是資料庫結構的**唯一真相來源（Single Source of Truth）**：
-> 每張資料表的完整 Schema 寫在 `models/*.py` 的**檔案開頭備註**，ORM 定義緊接在下方，
-> 所有結構異動都透過 `migrations/` 版本化。不另外維護會與程式脫節的 Excel / Word 規格書。
+> 目前正式 DB 的結構以使用者核定、手動執行的 v1.4 SQL 為準（身分、部門、發票、RAG 表；
+> v1.3→v1.4 ALTER 已於 2026-10-29 在正式 DB 執行）。v1.4 使用 UUID 主鍵、金額 `numeric(18,2)`、
+> 數量／單價 `numeric(18,4)`；固定 SQL 的 Repository 依此撰寫。
+> `models/*.py` 與 `migrations/` 是早期 ORM 草案（BIGINT 主鍵、NUMERIC(12,2)），尚未與 v1.4 對齊，
+> 不能當成現行結構的依據；下方第 4 節之後的命名與型別規則只適用於該草案。
 
 第一階段增加 `contracts.py` 型別契約及 `session.py` 設定保護，未改 ORM、migration 或資料表。
 Engine 延遲建立，先驗證 PostgreSQL 格式與 TLS，不限制執行位置；本機由 START 注入的 DATABASE_URL 連的是正式 DB。
 Alembic（`migrations/env.py`）同樣以 `resolve_ssl_mode()` 強制 TLS；連線優先用 `DATABASE_URL_UNPOOLED`，未設定時沿用 `DATABASE_URL`。
 transaction pooler 模式停用 prepared statements；2026-10-25 已實測唯讀 SELECT 1，寫入權限尚未驗證。
+手機上傳發票（2026-10-29）以固定 SQL 存取 v1.4 的 `invoices`、`invoice_items`、`invoice_files`、`ai_recognition_logs`、`invoice_field_reviews`、`invoice_changes`、`invoice_status_history`（`repositories/invoice_repository.py`、`repositories/recognition_repository.py`）；下表 `models/invoice.py` 仍是舊草案，欄位與 v1.4 不同，不能用來存取這些表。
+
 ADMIN 以固定 SQL 存取的 v1.3 身分表（`invoiceguard_identity.user_accounts`、`public.user_profiles`、`public.departments`、`public.user_departments`）目前在本站沒有對應 Model 或 migration。
 見 [MODULE_CONTRACT.md](../../docs/MODULE_CONTRACT.md)。
 
@@ -59,7 +63,7 @@ users ──1:N──> invoices ──1:N──> invoice_items
 
 ---
 
-## 4. 命名規則
+## 4. 命名規則（早期 ORM 草案；v1.4 的表以 v1.4 SQL 為準）
 
 | 對象 | 規則 | 範例 |
 |---|---|---|

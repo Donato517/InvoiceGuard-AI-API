@@ -351,3 +351,82 @@
 - 最終版本註記：13:57 他方再次更新 tests/unit/test_dev_accounts.py 後，本輪又以新快照重新執行 ADMIN 全部指定檢查；仍為 638 passed／9 skipped，checker、Ruff、environment、djLint 全 exit 0，latest-retest-before／after 完全一致。另有他方同步的 DEVELOPMENT_STATUS.md 與 main.js 變更，均保留；以 latest-admin-results.json 與 latest-retest-after.json 作為最後實測版本證據，不把之前的檢查點當成同一版本。
 
 - F 項最終例外：最後觀察三站 branch、HEAD 與 index entries 仍與開始前完全相同；但 ADMIN 的 .git/index SHA256 由 a2a8f8d6099e98b03223d88d090e604f374106dae9b4889b2044e7ee8736c852 變成 e883bcba66cc32051c429240bb08ebb78dc142999d939f1a44f806b227257b72。這代表暫存內容沒變、索引位元組卻有變化，發生來源未確認；不能把上方早先檢查點的「index SHA 相同」當成最後狀態。本輪沒有執行 Git 寫入，也不覆寫／還原索引；F 不宣稱位元組完全不變。詳見 git-final-observation.json。
+
+## 2026-10-28 Claude：前台登入改用 v1.3 Session
+
+- 範圍：`/api/v1/auth/login`、`/me`、`/logout`；security、config、deps、exceptions、user_repository、新增 session_repository、auth_service、schemas/auth、測試與文件。未改 ORM、Schema、migration、ADMIN 或正式資料。
+- **高｜真實帳號一律無法登入**：API 的 requirements.txt 與 venv 沒有 pwdlib，security.py 匯入失敗時改用 PBKDF2；DB CHECK 只接受 Argon2id，ADMIN 建立的帳號都是 Argon2id，因此必定 401。舊測試帳號也用 PBKDF2 產生，所以測試會通過。修正：requirements.txt 加 `pwdlib[argon2]==0.3.1`（與 ADMIN 同版），移除 PBKDF2 退路。
+- **中｜登入不符 v1.3 Session 設計**：原為自寫 HS256 JWT，沒有 user_sessions 紀錄，登出不能讓 Token 失效，改密碼的 Trigger 撤銷也無效；本機無金鑰時改用原始碼內的固定金鑰；查不到身分表時退回舊 `users` 表；以部門代碼寫死 role；未檢查 locked_until、resigned_at、主要部門，也不回部門。修正：改為 v1.3 不透明 Token＋SHA256 摘要（user_sessions），資格依後續接線第 2 點，/me 依第 3 點每次核對；移除 JWT、固定金鑰、舊表退路與 role。
+- 設定：`JWT_EXPIRE_MINUTES` 改為 `SESSION_EXPIRE_MINUTES`；auth 能力不再要求 `JWT_SECRET_KEY`（欄位與三站共用 environment.py 的機密名稱保留）。資料庫未設定時回 503 `SERVICE_UNAVAILABLE`，不再誤報「帳號或密碼錯誤」。
+- 驗證：check_project PASS；pytest 507 passed、14 skipped；ruff check／format --check、environment --check 通過。
+- 未驗：真實 DB 登入（會寫入正式 DB 的 user_sessions、last_login_at）、API DB 角色對 v1.3 表的權限／RLS、雲端部署。
+
+## 2026-10-28 Claude：Google Document AI／Gemini 本機設定
+
+- 範圍：app/core/config.py、.env.example、requirements.txt、tests（conftest、test_environment、test_environment_api、test_module_config）與文件；三站 AGENTS.md 共用區塊、DEVELOPMENT_STATUS、ENVIRONMENT_ISOLATION 同步。未新增模組、端點或 Schema。
+- 使用者核定（2026-10-28）：START 注入本機 API 程序的雲端設定不視為本機禁用機密。Settings 新增 GOOGLE_CLOUD_PROJECT_ID、GOOGLE_CLOUD_LOCATION、DOCUMENT_AI_PROCESSOR_ID、GOOGLE_SERVICE_ACCOUNT_JSON（SecretStr，列入 CLOUD_SECRET_FIELDS）；LOCAL_INJECTED_FIELDS = DATABASE_URL、GEMINI_API_KEY、GOOGLE_SERVICE_ACCOUNT_JSON，check_environment 與 local 能力檢查不再對這些欄位回 cloud_secret_in_local；START 未注入的其他機密（例如 CRON_SECRET）仍拒絕啟動。三站共用 environment.py 未改。
+- 舊測試以「本機只允許 DATABASE_URL」為前提，依新核定改為 LOCAL_INJECTED_FIELDS；新增允許與仍拒絕兩案。
+- requirements.txt 加 google-auth==2.62.0（帶入 cryptography 編譯擴充；本機 Smart App Control 今日可載入）。
+- 驗證：check_project（--project-root）PASS；pytest 508 passed、14 skipped；ruff check／format --check、environment --check 通過。以 START 讀值流程注入獨立 API 程序實測見 STARTUP TEST_REPORT 同日紀錄。
+- 未做：Document AI／Gemini 模組與能力檢查；雲端部署。
+- 共同 AGENTS 區塊「本機例外」依使用者核定改寫後，依 PROJECT_CHECKS.md 的流程把區塊 SHA-256（b9b1bdd0…）寫入三站 `contracts/project-contract.json` 的 `agent_rules_sha256`；三站 check_project（--project-root）PASS，API 508 passed、前台 374 passed、ADMIN 1193 passed。
+- Codex 檢驗 P3（同日）：三站 ENVIRONMENT_ISOLATION.md 補列 API 的五項 Google 設定（只給 API、LOCAL_INJECTED_FIELDS 範圍），並把「ADMIN 本機無法登入」限縮為依 SESSION_SECRET_KEY 簽署的舊 require_admin cookie 登入。
+
+## 2026-10-28 Claude：Google Document AI／Gemini 模組
+
+- 範圍：新增 app/integrations/document_ai.py、app/integrations/gemini.py、tests/unit/test_document_ai.py、tests/unit/test_gemini.py；config 新增 GEMINI_MODEL；.env.example、conftest 名稱清單與文件同步。未新增端點、未寫 DB、未改契約快照受管檔案。
+- 做法沿用 supabase_storage：`from_settings()` 建立用戶端、建構時檢查設定格式、錯誤轉固定代碼（detail 只放 Google status／reason）、可注入 httpx.Client 供離線測試。Document AI 以 google-auth 簽服務帳號 JWT、httpx 換權杖並在程序內暫存；Gemini 的 Key 只放 x-goog-api-key 標頭。
+- **中｜預設模型不可用**：規劃的預設 gemini-2.5-flash 在此專案回 404，Google 訊息為「no longer available to new users」，建議 gemini-3.8-flash。以免費的 models.get／countTokens 確認後，預設改為 gemini-3.8-flash（仍可用 GEMINI_MODEL 調整）。
+- **中｜額度用完被歸類為一般失敗**：實測 Google 以 HTTP 402＋RESOURCE_EXHAUSTED 回報預付額度用完；原對應只看 HTTP 狀態碼（429 才算配額），結果是 gemini_failed。修正：兩模組改以 Google status 優先（UNAUTHENTICATED、PERMISSION_DENIED、NOT_FOUND、RESOURCE_EXHAUSTED、INVALID_ARGUMENT），HTTP 狀態碼為後備並加入 402；補回歸案例。
+- 文件對齊：MODULE_CONTRACT 舊列「JWT 使用者登入尚未實作」改為 v1.3 Session 已實作；AGENTS／DEVELOPMENT_STATUS 依使用者手機實測更新為「登入實測成功」。
+- 驗證：check_project（--project-root）PASS；pytest 553 passed、14 skipped（新增 45 案）；ruff check／format --check、environment --check 通過。真實呼叫結果見 TEST_REPORT.md 同日紀錄。
+
+## 2026-10-28 Claude：Groq 對話模組與情境選模型
+
+- 範圍：新增 app/integrations/groq.py、app/integrations/chat_models.py（ChatMessage／ChatReply 由 gemini.py 移出，gemini 匯入路徑不變）、tests/unit/test_groq.py；config 新增 GROQ_API_KEY（SecretStr，列入 CLOUD_SECRET_FIELDS 與 LOCAL_INJECTED_FIELDS）、GROQ_DEFAULT_MODEL、GROQ_ADVANCED_MODEL；.env.example、conftest 名稱清單與文件同步。未新增端點、未寫 DB。
+- 使用者核定情境：default、recognition（識別）用 20B（openai/gpt-oss-20b），120B（openai/gpt-oss-120b）為進階備用，以 advanced=True 指定；rag、discussion（討論）用 120B。model_for() 集中這個規則。
+- 做法沿用 Gemini 模組：from_settings、建構時檢查設定、可注入 httpx.Client、錯誤轉 groq_* 固定代碼（detail 只放 Groq 錯誤 code／type）；以 httpx 呼叫 OpenAI 相容 REST，不安裝 openai 套件（其依賴含編譯擴充）。json_output 送 response_format=json_object；回答只取 message.content，不含 gpt-oss 的 reasoning。
+- 實測發現（未改程式）：OCR→20B 擷取時，「一〇八年九、十月份」被換算成 tax_period 202109（正確為 201909）。民國年轉換、日期與金額格式應由上層程式驗證或換算，不直接採用模型輸出；此屬之後的欄位整理業務。
+- 驗證：check_project（--project-root）PASS；pytest 582 passed、14 skipped（新增 29 案）；ruff check／format --check、environment --check 通過。實測見 TEST_REPORT.md 同日紀錄。
+- 同日續：使用者授權 START 把 GROQ_API_KEY 只注入 API；三站 AGENTS 共同區塊、DEVELOPMENT_STATUS「本機雲端設定」、ENVIRONMENT_ISOLATION 補上 GROQ_API_KEY，agent_rules_sha256 更新為 a0f46066…；本站 ARCHITECTURE、MODULE_CONTRACT、DEVELOPMENT_STATUS、AGENTS 現況改為「本機由 START 注入」。三站 check_project PASS，API 582、前台 374、ADMIN 1193 passed。
+
+## 2026-10-28 Claude：依 Codex 檢驗修正錯誤 detail 清洗
+
+- **中 P2｜上游異常錯誤欄位可能帶入 detail**：groq.py 的 `_error_detail()` 直接 `str()` 上游 error.code／type；巢狀物件、陣列或回顯的 Key 會進入 detail（Codex 以合成回應重現）。同類寫法也在 gemini.py 的 `_google_error()`、document_ai.py 的 `_google_detail()`／`_token_detail()`。修正：Groq 只接受小寫英數底線、64 字內、且不含 Key 的 code／type；Google status／reason 只接受大寫英數底線 64 字內，details 必須是陣列；OAuth 錯誤只接受小寫短代碼。不合格時改回 `HTTP狀態碼`（reason 直接略過）。
+- **低 P3｜缺少 403、422、498 回歸案例**：test_groq 參數化補上三種狀態，並斷言固定錯誤碼與 detail。
+- 回歸：新增 Groq 6 案、Gemini 4 案、Document AI 7 案異常欄位測試（巢狀物件、陣列、Key 回顯、長字串、含空白文字、details 非陣列、OAuth 非字串）。
+- 驗證：check_project（--project-root）PASS；pytest 602 passed、14 skipped；ruff check／format --check、environment --check 通過。
+- Codex 複查（同日）：前次 P2／P3 已修正，未發現新缺陷。以舊版模組副本對照，17 個異常欄位案例中 12 案為修正回歸（舊版失敗），5 案為既有防護補測（舊版即通過：Groq 非物件 error、Google details 為字串兩案、OAuth 物件／陣列兩案）；另 3 案為 Groq 403／422／498 狀態補測。
+
+## 2026-10-29 Claude：依 Codex 檢驗修正手機上傳，並加入使用者修改欄位標記
+
+- **P1｜可選欄位為 null／空字串時送出回 500**：`schemas/invoice_upload.py` 的 seller_name、buyer_name、total_amount_zh、buyer_tax_id 把長度／格式限制套在整個 `str | None` 上，None 觸發 TypeError。改為限制只放在字串分支（`Annotated[Annotated[str, Field(...)] | None, BeforeValidator(blank_to_none)]`）。回歸：四欄 null／空字串／空白皆 201、必填統編為 None 仍 422。
+- **P2｜異常辨識值造成 500、紀錄停在 pending**：`normalize_amount` 先排除超出 numeric(18, places) 的值再 quantize；`parse_printed_period` 年份超出範圍回 None；`_confidence` 排除 NaN／無限值；`_build_recognition` 與結果組裝包在 try 中，失敗記 failed（`postprocess_failed:<例外類型>`）並回 502 AI_RECOGNITION_FAILED。回歸：1e30、99999 年、NaN、後處理例外。
+- **P2｜金額捨入為 HALF_EVEN**：明確指定 ROUND_HALF_UP，四捨五入後超出上限也回 None。回歸：2.345→2.35、4 位小數、9999999999999999.995。
+- **P2｜15 秒只限制備援啟動**：改為 OCR＋模型總時限 25 秒（RECOGNITION_DEADLINE_SECONDS），`DocumentAIClient.process()`、`GroqClient.chat()` 新增 `timeout_seconds`（取剩餘時間與預設 45 秒的較小者，0 以下直接逾時）；剩餘 8 秒以上才改 120B。存圖（Storage 30 秒逾時）與寫 DB 不在此時限內。回歸：剩餘時間傳入 OCR 與模型、時間不足不備援、備援只用剩餘時間、逾時上限。
+- **P2｜invoice_changes 只存淨差異**：配合使用者新需求一併處理——前台記錄核對頁的每次修改並在送出時傳 `changes`，API 驗證每個欄位的紀錄須從 AI 原值接續到送出值（否則 400 INVOICE_CHANGES_INVALID），依序寫入 invoice_changes（changed_at 用 clock_timestamp() 保留順序），A→B→A 也會留下紀錄；有差異但沒有紀錄的欄位由 API 補一筆。invoice_field_reviews 仍只記每輪淨差異（使用者修改過的欄位，供審核標示）。明細改以 `source_line_no` 對應 AI 明細，刪除的 AI 明細記為表頭 `deleted_item_{n}`，取代原本依位置比對與 item_count。
+- **P3｜文件矛盾**：MODULE_CONTRACT「沒有可寫入業務資料的 HTTP 端點」改為現況；app/db/README.md 註明現行結構以 v1.4 SQL 為準，舊 ORM 規則（BIGINT、NUMERIC(12,2)）只適用早期草案。
+- 前台與 API 比對規則一致性：以瀏覽器實際執行前台 canonicalValue 的 17 個案例對照 API `_canonical_value`，發現全形數字不一致（Python `\d` 會配到全形），改為只認 ASCII 數字，並把該 17 案寫成回歸測試。
+- 驗證：見 TEST_REPORT.md 同日紀錄。
+
+## 2026-10-29 Claude：Codex 第二輪檢驗修正（手機上傳）
+
+- **P2｜OCR 換發權杖不受剩餘時間限制**：`DocumentAIClient.process(timeout_seconds=…)` 改為建立截止時間，換發權杖與 OCR 兩次請求各自以「截止時間－現在」為逾時上限（仍不超過權杖 15 秒、OCR 45 秒），權杖耗盡時間時 OCR 不送出、回 document_ai_timeout／NoTimeLeft。回歸：test_document_ai 以可推進的假時鐘驗證權杖耗時 0.6 秒時 OCR 只剩 0.4 秒、耗時 1.5 秒時不送 OCR。
+- **P2｜高精度數字與空白定義使前後台比對不一致**：`_canonical_value` 原本以 Decimal normalize 處理數字，超過 28 位有效數字會被捨入（2.000…01 被當成 2）；空白用 Python 的 strip／\s，與 JavaScript 的範圍不同。改為：數字只以字串去前導 0 與小數尾端 0（`invoice_format.canonical_digits`，送出的 Decimal 以 `format(value, "f")` 轉字串，不經 context 捨入）；空白改用明列的 `invoice_format.WHITESPACE`（與 JavaScript trim()／\s 相同的 25 個字元），`schemas.invoice_upload.blank_to_none` 也改用它。前台 mobile-camera.js 改用同一份明列集合。以 node 執行前台函式對照 API，17,325 組案例（所有 Unicode 空白類字元前後與中間插入、高精度與科學記號、全形數字、大小寫等）差異 0。回歸：比對案例表新增 7 案、數量 2→2.000…01→2 的兩筆紀錄都保存（201）。
+- **P2｜修改紀錄超過 500 筆時被無聲壓縮**：前台移除 compactChanges；超過 500 筆時不送出並提示重新辨識，不再以淨差異取代逐次紀錄。API 上限不變（500 筆可存、501 筆 422），新增 501 筆回 422 且不寫資料的回歸測試。
+- **P3｜ARCHITECTURE 第 6 節仍寫上傳端點未實作、file_key**：改為已實作的手機發票影像（路徑、v1.4 欄位、1 小時清理）與尚未接線的通用檔案契約分列；第 7 節本機注入補上 GROQ_API_KEY。
+- 前台第 4 項（Accept 錯誤格式）記在前台 REVIEW_FIX_LOG。
+- 驗證：見 TEST_REPORT.md 同日紀錄。
+
+## 2026-10-29 Claude：Codex 檢驗電腦上傳頁（API）
+
+- **P3｜空白多頁 PDF 回 INVOICE_TEXT_NOT_FOUND**：無文字判斷在頁數判斷之前。改為先判斷 PDF 頁數，多頁 PDF 不論有無文字都回 400 INVOICE_PDF_MULTIPAGE、記 failed、不呼叫模型。回歸：多頁 PDF 測試參數化為有文字、空字串、純空白三種。
+- **P3｜文件仍只寫 JPG／PNG**：DEVELOPMENT_STATUS 的 Storage 路徑補 .pdf；ARCHITECTURE 第 4 節流程補 PDF 檔頭、多頁拒絕與無文字的順序。
+- 前台 P2（換檔競態）與 P3（登入返回頁）記在前台 REVIEW_FIX_LOG。
+- 驗證：test_invoice_upload.py 112 passed；全套結果見前台同日紀錄。
+
+## 2026-10-29 Claude：Codex 檢驗 ADMIN AI 模組（API 文件）
+
+- **P3｜現況仍寫 GROQ_API_KEY「只注入本機 API」**：AGENTS 現況與 DEVELOPMENT_STATUS 的 Groq 列改為「START 注入 API；2026-10-29 起 ADMIN 也由 START 從自己 Vercel 專案注入同一組 AI 設定，兩站各用各的值」，歷史實測紀錄保留原日期。
+- Codex P2（本站不讀的機密名稱只警告）為三站既有兩級設計，未修改；說明見 ADMIN REVIEW_FIX_LOG 同日紀錄。
+- 驗證：check_project（--project-root）PASS；test_project_governance、test_shared_integrations 176 passed、14 skipped。

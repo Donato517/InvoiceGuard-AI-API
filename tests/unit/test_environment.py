@@ -184,8 +184,15 @@ def test_inherited_secrets_block_only_fields_this_site_reads(
 ) -> None:
     # 本站會讀取的機密欄位：拒絕啟動；本站沒有的欄位（例如個人 shell Key）：僅警告且不載入值
     # ADMIN／API 依核定允許本機 DATABASE_URL：合法連線字串不阻擋，也不回報為機密
-    approved = PLATFORM in {"admin", "api"} and name == "DATABASE_URL"
-    value = f"postgresql://synthetic:{MARKER}@db.example.invalid/test?sslmode=require"
+    # API 另允許 START 注入的 Google AI 設定（2026-10-28 使用者核定）
+    approved = (PLATFORM in {"admin", "api"} and name == "DATABASE_URL") or (
+        PLATFORM == "api" and name in {"GEMINI_API_KEY", "GOOGLE_SERVICE_ACCOUNT_JSON"}
+    )
+    value = (
+        f"postgresql://synthetic:{MARKER}@db.example.invalid/test?sslmode=require"
+        if name == "DATABASE_URL"
+        else MARKER
+    )
     monkeypatch.setenv("IG_ENV_TEST_" + name, value if approved else MARKER)
     settings = make_settings()
     report = settings.check_environment()

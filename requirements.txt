@@ -9,3 +9,9 @@ pydantic-settings==2.16.1
 SQLAlchemy==2.1.5
 psycopg[binary]==3.3.6
 httpx==0.28.1
+# 密碼雜湊（Argon2id）；版本需與 InvoiceGuard-AI-ADMIN 一致
+pwdlib[argon2]==0.3.1
+# Google 服務帳號權杖（Document AI）；會帶入 cryptography 編譯擴充，需注意 Smart App Control
+google-auth==2.62.0
+# 手機上傳發票影像（multipart/form-data）；版本與前台、ADMIN 一致
+python-multipart==0.0.32
