@@ -12,9 +12,10 @@ import logging
 from collections.abc import Iterator
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Header
 from sqlalchemy.orm import Session
 
+from app.core.exceptions import UnauthorizedError
 from app.core.module_errors import ModuleConfigurationError
 from app.db.session import get_db
 
@@ -47,3 +48,19 @@ def get_optional_db() -> Iterator[Session | None]:
 
 
 OptionalDbSession = Annotated[Session | None, Depends(get_optional_db)]
+
+
+def require_bearer_token(authorization: Annotated[str | None, Header()] = None) -> str:
+    """FastAPI 相依注入：取出 `Authorization: Bearer <session_token>`；未提供時回 401。
+
+    只解析標頭，不驗證 Session；驗證由 auth_service.resolve_session 查 DB 完成。
+    """
+    scheme, _, token = (authorization or "").partition(" ")
+    token = token.strip()
+    if scheme.lower() != "bearer" or not token:
+        raise UnauthorizedError("尚未登入或登入已失效")
+    return token
+
+
+# 需登入的端點：在參數宣告 `token: BearerToken`，再交給 auth_service.resolve_session 驗證
+BearerToken = Annotated[str, Depends(require_bearer_token)]

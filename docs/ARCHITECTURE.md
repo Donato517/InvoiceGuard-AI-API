@@ -95,11 +95,11 @@ InvoiceGuard-AI-API/
 │   │   ├── robots.py             #   GET /robots.txt（內容取自 core/constants.py；不收錄靠 X-Robots-Tag）
 │   │   ├── cron.py               #   GET /api/cron/*（僅供 Vercel Cron）
 │   │   └── v1/                   #   /api/v1/*
-│   │       ├── auth.py           #     登入 / 登出 / 目前使用者（TODO）
+│   │       ├── auth.py           #     登入 / 登出 / 目前使用者（v1.3 Session）
 │   │       └── invoices.py       #     前台發票（TODO）
 │   ├── schemas/                  # Pydantic 請求 / 回應模型（common 分頁／錯誤格式、auth、user、invoice、data、files）
 │   ├── services/                 # 商業邏輯層（data / file 為第一階段契約，未接線；db_connection 為唯讀 SELECT 1 檢查）
-│   ├── integrations/             # ai_client、einvoice_client、supabase_storage（Vercel 模組：檔案存取，與 ADMIN 相同）、storage_client（第一階段契約，未接線）、vercel（執行環境資訊與設定檢查）
+│   ├── integrations/             # ai_client、einvoice_client、document_ai（Google Document AI OCR）、gemini（Gemini 對話）、groq（Groq gpt-oss 對話，20B／120B 依情境）、chat_models（對話共用型別）、supabase_storage（Vercel 模組：檔案存取，與 ADMIN 相同）、storage_client（第一階段契約，未接線）、vercel（執行環境資訊與設定檢查）
 │   ├── jobs/                     # 排程工作（runner.py 為共用執行機制；目前為 stub）
 │   ├── db/                       # ★ 資料庫模組（說明見 app/db/README.md）
 │   │   ├── README.md             #   Schema 總覽、ERD、命名規則、Migration 流程
@@ -134,22 +134,35 @@ InvoiceGuard-AI-API/
 
 ---
 
-## 4. 請求處理流程（範例：上傳發票）
+## 4. 請求處理流程（手機上傳發票，2026-10-29）
 
-以下為目標設計：JWT 登入、CRUD、上傳端點與一般使用者授權仍待實作。
-現有排程工作及 runner 也包含 TODO；測試以替身驗證 Cron 驗證，不執行同步。
+前台手機頁經本站轉呼叫；每個請求都以 Bearer Session 經 auth_service 核對。部門功能權限尚未接線；
+發票列表／詳情與排程 job 仍為 TODO。
 
 ```
-POST /api/v1/invoices/upload
-  │
-  ├─ routers/v1/invoices.py      驗證檔案類型與大小、取得登入者（CurrentUser）
-  ├─ services/invoice_service.py
-  │    ├─ integrations/supabase_storage.py   以 Vercel 模組上傳檔案，取得 file_key
-  │    ├─ db/repositories/invoice_repository.py   建立 invoices（status=pending）
-  │    └─ commit
-  └─ 回傳 InvoiceRead（schemas/invoice.py）
+POST /api/v1/invoices/recognize（multipart file）
+  ├─ routers/v1/invoices.py        核對 Session、讀取檔案（最多 4 MB＋1 byte）
+  └─ services/invoice_upload_service.recognize
+       ├─ 檢查 JPG／PNG／PDF 檔頭與宣告類型；確認 Storage／Document AI／Groq 已設定（未設定時不寫任何資料）
+       ├─ recognition_repository.insert（ai_recognition_logs，pending）→ commit
+       ├─ supabase_storage（bucket=invoices）put {user_id}/INVOICES_{台灣時間}_{recognition_id}.jpg|png|pdf
+       ├─ document_ai.process；PDF 超過一頁 → 400 INVOICE_PDF_MULTIPAGE（記 failed，不呼叫模型）
+       ├─ 沒有文字 → 400 INVOICE_TEXT_NOT_FOUND；否則 groq.chat（recognition，20B；失敗時 120B 再試一次）　總時限 25 秒，逾時以剩餘時間傳入
+       ├─ utils/invoice_format 換算日期／期別／金額／字軌號碼／統編，產生檢核提醒
+       ├─ recognition_repository.complete（success／partial；失敗記 failed＋固定代碼）→ commit
+       └─ cleanup_expired_sources：刪除逾 1 小時未送出的影像，記 source_deleted_at
 
-之後由 daily_risk_scan 排程（或使用者手動觸發 /analyze）進行 AI 分析
+POST /api/v1/invoices/check-duplicate   字軌＋號碼＋賣方統編，已作廢不計
+
+POST /api/v1/invoices（JSON）
+  └─ services/invoice_upload_service.submit（單一交易）
+       ├─ 鎖定本人辨識紀錄：1 小時內、未送出、辨識成功
+       ├─ invoice_repository.lock_invoice_key（advisory lock）→ exists_duplicate（重複回 409）
+       ├─ insert invoices（pending_department_approval）／invoice_items／invoice_files（同一物件，不搬移）
+       ├─ 核對 changes（須從 AI 原值接續到送出值）與明細 source_line_no
+       ├─ 與 AI 原值不同的欄位 → invoice_field_reviews（審核標示）；逐次修改 → invoice_changes
+       ├─ invoice_status_history
+       └─ recognition_repository.link_invoice → commit
 ```
 
 ---
@@ -198,7 +211,8 @@ Vercel Function 的檔案系統**只有 `/tmp` 可寫入**，且執行個體結�
 | 類型 | 本機 | Vercel | 規則 |
 |---|---|---|---|
 | 處理中暫存檔（PDF 解析、影像轉檔） | `tmp/` | `/tmp/invoiceguard` | 一律用 `app.utils.file_utils.temp_file_path()`，離開區塊自動刪除 |
-| 使用者上傳的原始檔 | START 注入 S3_*，與雲端同一個 Bucket（正式資料） | Supabase Storage，經 Vercel 模組；上傳端點尚未實作 | `file_key` 是現有欄位；獨立 metadata 表待另行規劃 |
+| 手機上傳的發票影像（已實作，2026-10-29） | START 注入 S3_*，invoices bucket（正式資料） | 同左，經 Vercel 模組 | `{user_id}/INVOICES_{台灣時間 YYYYMMDDHHMMSS}_{recognition_id}.{副檔名}`；辨識時記在 `ai_recognition_logs.source_storage_path`，送出後為 `invoice_files.storage_path`（bucket_name='invoices'，不搬移）；未送出超過 1 小時刪除並記 `source_deleted_at` |
+| 其他使用者上傳檔（通用檔案契約） | 同上；bucket 依領域各自指定 | 同上 | `FileService`／`get_storage_client()` 尚未接線；RAG 等其他領域的檔案表（例如 `rag_files.bucket_name`）另行規劃 |
 | 日誌 | console | Vercel Runtime Logs | 不寫入檔案 |
 | 測試 / 除錯輸出 | `tmp/` | — | `tmp/` 已列入 `.gitignore`，只保留 `.gitkeep` |
 
@@ -212,7 +226,7 @@ Vercel Function 的檔案系統**只有 `/tmp` 可寫入**，且執行個體結�
 
 本機 JSON、Vercel Preview／Production 的實際來源與啟動驗證以 [環境與 URL 隔離](ENVIRONMENT_ISOLATION.md) 為準；dotenv 與 secrets 目錄永遠不載入。
 
-預設不讀 `.env`。本機只由 START 注入核定的 `DATABASE_URL`、`S3_*`、`SUPABASE_STORAGE_BUCKET`（Production 值，連正式 DB／Storage）；其他機密（例如 `CRON_SECRET`、`JWT_SECRET_KEY`）出現在本機即拒絕啟動。`APP_ENV=local` 不跳過既有 Cron 驗證。
+預設不讀 `.env`。本機只由 START 注入核定的 `DATABASE_URL`、`S3_*`、`SUPABASE_STORAGE_BUCKET` 、Google Document AI／Gemini 五項與 `GROQ_API_KEY`（Production 值，連正式 DB／Storage／Google／Groq；2026-10-28 核定）；其他機密（例如 `CRON_SECRET`、`JWT_SECRET_KEY`）出現在本機即拒絕啟動。`APP_ENV=local` 不跳過既有 Cron 驗證。
 完整能力別驗證與未完成項目見 [MODULE_CONTRACT.md](MODULE_CONTRACT.md)。
 
 | 變數 | 說明 | 必填 |
@@ -221,10 +235,16 @@ Vercel Function 的檔案系統**只有 `/tmp` 可寫入**，且執行個體結�
 | `DEBUG` | `true` 時開放 `/docs`；正式環境必須為 `false` | |
 | `DATABASE_URL` | PostgreSQL pooled 連線字串（應用程式使用）；本機由 START 注入 | ✓ |
 | `DATABASE_URL_UNPOOLED` | PostgreSQL 直連字串（Alembic 優先使用，未設定時沿用 `DATABASE_URL`）；本機屬禁用機密 | migration 時 |
-| `JWT_SECRET_KEY` / `JWT_EXPIRE_MINUTES` | 登入 token 簽章金鑰 / 有效分鐘數；金鑰本機屬禁用機密 | 雲端 ✓ |
+| `SESSION_EXPIRE_MINUTES` | 登入 Session 有效分鐘數（1–1440） | `60` |
+| `JWT_SECRET_KEY` | 舊 JWT 簽章金鑰；登入改用 v1.3 Session 後不再使用，名稱保留供本機機密檢查（本機屬禁用機密） | 不需 |
 | `CRON_SECRET` | Vercel Cron 驗證密鑰（至少 16 字元）；本機屬禁用機密 | 雲端 ✓ |
 | `AI_API_KEY` | 保留既有 AI 設定名稱；模型服務尚未串接 | 選填 |
-| `GEMINI_API_KEY` / `OPENAI_API_KEY` | 雲端模型設定；尚未串接 | 選填 |
+| `GEMINI_API_KEY` | Gemini（Google AI Studio）金鑰；本機由 START 注入；`integrations/gemini.py` 使用 | 雲端 ✓ |
+| `GEMINI_MODEL` | Gemini 對話模型名稱（不是機密） | `gemini-3.8-flash` |
+| `GROQ_API_KEY` | Groq 金鑰；`integrations/groq.py` 使用；本機由 START 注入 | 雲端 ✓ |
+| `GROQ_DEFAULT_MODEL` / `GROQ_ADVANCED_MODEL` | Groq 預設（預設／識別）與進階（RAG／討論／進階備用）模型 | `openai/gpt-oss-20b` / `openai/gpt-oss-120b` |
+| `GOOGLE_CLOUD_PROJECT_ID` / `GOOGLE_CLOUD_LOCATION` / `DOCUMENT_AI_PROCESSOR_ID` / `GOOGLE_SERVICE_ACCOUNT_JSON` | Google Document AI（OCR）專案、區域、Processor ID、服務帳號完整 JSON；本機由 START 注入；`integrations/document_ai.py` 使用 | 雲端 ✓ |
+| `OPENAI_API_KEY` | 雲端模型設定；尚未串接 | 選填 |
 | `EINVOICE_APP_ID` / `EINVOICE_API_KEY` | 財政部平台憑證；僅啟用該整合才需要 | 選填 |
 | `BLOB_READ_WRITE_TOKEN` | 保留既有 Blob 設定名稱，不自動選用 | 選填 |
 | `MODULE_BACKEND` / `REMOTE_API_BASE_URL` | 保留的模式欄位；只有 `integrations/vercel.get_platform()` 讀取，沒有遠端傳輸消費端 | 本機無機密 |

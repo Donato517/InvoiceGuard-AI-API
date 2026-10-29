@@ -3,7 +3,7 @@
 > 前台網站（InvoiceGuard-AI）在**伺服器端**依此規範呼叫 API；瀏覽器不直接呼叫 API。
 > 後台（InvoiceGuard-AI-ADMIN）以自有 DB 模組直接存取資料庫，不經過 API。修改格式前需先通知前台。
 
-第一階段僅提供設定與 Python 契約；此文件中的業務路徑、JWT 與完整 CRUD 是目標設計，
+第一階段僅提供設定與 Python 契約；此文件中的業務路徑與完整 CRUD 是目標設計（`/api/v1/auth` 已實作，見第 7 節），
 不是已完成或已部署的功能。現有 `/health` 與 Cron 驗證保留。
 422 details 只回傳 loc / type / 固定 msg，不回傳原始 input / ctx，避免反射密碼或 Token。
 Python `DeleteResult` 是內部服務結果，未來 HTTP DELETE 仍依本文件回 204，不直接改為 JSON 回應。
@@ -49,6 +49,7 @@ Python `DeleteResult` 是內部服務結果，未來 HTTP DELETE 仍依本文件
 | `422` | 請求參數格式錯誤 |
 | `500` | 系統未預期錯誤 |
 | `502` | 外部服務（AI、財政部平台）呼叫失敗 |
+| `503` | 本站依賴的服務暫時無法使用（例：資料庫未設定） |
 
 ## 4. 資料格式
 
@@ -114,6 +115,7 @@ Python `DeleteResult` 是內部服務結果，未來 HTTP DELETE 仍依本文件
 | `VALIDATION_ERROR` | 422 | 參數格式錯誤，`details` 為欄位錯誤清單 |
 | `INTERNAL_ERROR` | 500 | 系統未預期錯誤 |
 | `EXTERNAL_SERVICE_ERROR` | 502 | 外部服務失敗 |
+| `SERVICE_UNAVAILABLE` | 503 | 本站依賴的服務暫時無法使用 |
 
 ### 6.2 業務代碼
 
@@ -122,13 +124,30 @@ Python `DeleteResult` 是內部服務結果，未來 HTTP DELETE 仍依本文件
 | code | HTTP | 說明 |
 |---|---|---|
 | `INVOICE_NOT_FOUND` | 404 | 發票不存在（範例，實作時確認） |
-| `INVOICE_DUPLICATED` | 409 | 同一使用者重複上傳同一張發票（範例，實作時確認） |
+| `INVOICE_DUPLICATED` | 409 | 已有相同字軌＋號碼＋賣方統編且未作廢的發票（POST /invoices） |
+| `INVOICE_IMAGE_INVALID` | 400 | 不是 JPG／PNG／PDF、宣告類型與內容不符，或 OCR 無法處理這個檔案 |
+| `INVOICE_IMAGE_TOO_LARGE` | 400 | 檔案超過 4 MB |
+| `INVOICE_PDF_MULTIPAGE` | 400 | PDF 超過一頁（一份 PDF 一張發票） |
+| `INVOICE_TEXT_NOT_FOUND` | 400 | OCR 沒有辨識到任何文字 |
+| `STORAGE_FAILED` | 502 | 影像存入 Storage 失敗 |
+| `OCR_FAILED` | 502 | Document AI 辨識失敗 |
+| `AI_RECOGNITION_FAILED` | 502 | 模型無法整理成欄位 JSON（含 120B 備援仍失敗），或回覆內容無法換算 |
+| `RECOGNITION_NOT_FOUND` | 404 | 辨識紀錄不存在或不是本人的 |
+| `RECOGNITION_ALREADY_SUBMITTED` | 409 | 這次辨識已送出過 |
+| `RECOGNITION_EXPIRED` | 409 | 辨識超過 1 小時或影像已清理，需重新拍攝 |
+| `RECOGNITION_NOT_USABLE` | 409 | 這次辨識未完成或失敗 |
+| `INVOICE_ITEMS_INVALID` | 400 | 明細的 source_line_no 重複或不是這次辨識的 AI 明細 |
+| `INVOICE_CHANGES_INVALID` | 400 | 修改紀錄的欄位不存在，或無法從 AI 原值接續到送出值 |
+
+Storage、Document AI、Groq 未設定或用量已滿時回通用 `SERVICE_UNAVAILABLE`（503）。
 
 ## 7. 驗證
 
-- 前台伺服器在 `Authorization` 標頭帶 `Bearer <access_token>`
-- access token 由前台存在使用者瀏覽器的 **httpOnly cookie**，瀏覽器端 JavaScript 讀不到
-- token 過期回 `401`，前台清除 cookie 並導向登入頁
+- `POST /api/v1/auth/login`（email、password）成功回 `session_token`、`expires_in`、`expires_at`、`user_id`、`email`、`display_name`、`department`（本次選取部門，預設主要部門）、`departments`；帳號不存在、密碼錯誤、帳號不可登入都回同一個 `401` 訊息。
+- Session Token 是不透明隨機字串（v1.3 `user_sessions`，DB 只存 SHA256 摘要），不是 JWT；API 不發 cookie。
+- 前台伺服器在 `Authorization` 標頭帶 `Bearer <session_token>`；Token 由前台存在使用者瀏覽器的 **httpOnly cookie**，瀏覽器端 JavaScript 讀不到。
+- `GET /api/v1/auth/me` 每次重新核對 Session 並回登入者與部門；`POST /api/v1/auth/logout` 撤銷 Session（回 `{"status": "ok"}`）。
+- Session 無效、過期、已登出或密碼已變更回 `401`，前台清除 cookie 並導向登入頁。
 
 ## 8. 版本管理
 

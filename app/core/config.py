@@ -68,14 +68,29 @@ class Settings(BaseSettings):
     DB_CONNECT_TIMEOUT_SECONDS: int = Field(default=5, ge=1, le=30)
 
     # ---- 安全 ----
+    # 舊 JWT 簽章金鑰：登入已改用 v1.3 Session（DB 只存 Token 摘要），不再使用；保留名稱供本機機密檢查
     JWT_SECRET_KEY: SecretStr = Field(default_factory=lambda: SecretStr(""), repr=False)
-    JWT_EXPIRE_MINUTES: int = 60
+    # 登入 Session 有效分鐘數（寫入 invoiceguard_identity.user_sessions.expires_at）
+    SESSION_EXPIRE_MINUTES: int = 60
     CRON_SECRET: SecretStr = Field(default_factory=lambda: SecretStr(""), repr=False)
 
     # ---- 外部服務 ----
     AI_API_KEY: SecretStr = Field(default_factory=lambda: SecretStr(""), repr=False)
     GEMINI_API_KEY: SecretStr = Field(default_factory=lambda: SecretStr(""), repr=False)
+    # Gemini 對話模型名稱；不是機密，雲端未設定時用預設值（gemini-2.5-flash 已不開放給新專案）
+    GEMINI_MODEL: str = "gemini-3.8-flash"
+    # Groq 對話（gpt-oss）；預設與識別用 20B，RAG／討論與進階備用用 120B（2026-10-28 使用者核定）
+    GROQ_API_KEY: SecretStr = Field(default_factory=lambda: SecretStr(""), repr=False)
+    GROQ_DEFAULT_MODEL: str = "openai/gpt-oss-20b"
+    GROQ_ADVANCED_MODEL: str = "openai/gpt-oss-120b"
     OPENAI_API_KEY: SecretStr = Field(default_factory=lambda: SecretStr(""), repr=False)
+    # Google Document AI（OCR）；本機由 START 經 Vercel CLI 注入（2026-10-28 使用者核定）
+    GOOGLE_CLOUD_PROJECT_ID: str = ""
+    GOOGLE_CLOUD_LOCATION: str = ""
+    DOCUMENT_AI_PROCESSOR_ID: str = ""
+    GOOGLE_SERVICE_ACCOUNT_JSON: SecretStr = Field(
+        default_factory=lambda: SecretStr(""), repr=False
+    )
     EINVOICE_APP_ID: SecretStr = Field(default_factory=lambda: SecretStr(""), repr=False)
     EINVOICE_API_KEY: SecretStr = Field(default_factory=lambda: SecretStr(""), repr=False)
     BLOB_READ_WRITE_TOKEN: SecretStr = Field(default_factory=lambda: SecretStr(""), repr=False)
@@ -96,10 +111,17 @@ class Settings(BaseSettings):
         "AI_API_KEY",
         "GEMINI_API_KEY",
         "OPENAI_API_KEY",
+        "GOOGLE_SERVICE_ACCOUNT_JSON",
+        "GROQ_API_KEY",
         "EINVOICE_APP_ID",
         "EINVOICE_API_KEY",
         "BLOB_READ_WRITE_TOKEN",
         "SUPABASE_SECRET_KEY",
+    )
+    # START 經 Vercel CLI 注入本機 API 程序的雲端設定：值只在該程序記憶體，不視為本機禁用機密
+    # （DATABASE_URL 2026-10-25；Google Document AI／Gemini、Groq 2026-10-28 使用者核定）
+    LOCAL_INJECTED_FIELDS: ClassVar[frozenset[str]] = frozenset(
+        {"DATABASE_URL", "GEMINI_API_KEY", "GOOGLE_SERVICE_ACCOUNT_JSON", "GROQ_API_KEY"}
     )
 
     # ---- Vercel 系統變數（由 Vercel 自動注入，不需手動設定）----
@@ -119,12 +141,15 @@ class Settings(BaseSettings):
         return settings_sources(init_settings, env_settings, repo_root=BASE_DIR, platform="api")
 
     def check_environment(self) -> dict[str, Any]:
-        """驗證本站邊界；依核定允許本機 DATABASE_URL，其他機密規則不變。"""
+        """驗證本站邊界；START 注入的核定雲端設定可在本機使用，其他機密規則不變。"""
         report = environment_report(self, "api")
         report["issues"] = [
             issue
             for issue in report["issues"]
-            if not (issue["field"] == "DATABASE_URL" and issue["code"] == "cloud_secret_in_local")
+            if not (
+                issue["field"] in self.LOCAL_INJECTED_FIELDS
+                and issue["code"] == "cloud_secret_in_local"
+            )
         ]
         if (
             self.APP_ENV == "local"
@@ -230,8 +255,8 @@ class Settings(BaseSettings):
                 ConfigurationIssue("MODULE_BACKEND", "remote_required", "本機應使用遠端模式")
             )
         for name in self.CLOUD_SECRET_FIELDS:
-            # DATABASE_URL 依核定可在本機使用（START 經 Vercel CLI 注入）
-            if name != "DATABASE_URL" and getattr(self, name).get_secret_value():
+            # START 經 Vercel CLI 注入的核定設定可在本機使用
+            if name not in self.LOCAL_INJECTED_FIELDS and getattr(self, name).get_secret_value():
                 issues.append(
                     ConfigurationIssue(name, "cloud_secret_in_local", "本機不應載入公司機密")
                 )
@@ -331,22 +356,14 @@ class Settings(BaseSettings):
         return issues
 
     def _auth_issues(self) -> list[ConfigurationIssue]:
-        issues: list[ConfigurationIssue] = []
-        if len(self.JWT_SECRET_KEY.get_secret_value().strip()) < 32:
-            issues.append(
+        # 登入 Session 為不透明 Token＋DB 摘要，不需要簽章金鑰；只檢查有效期間
+        if not 1 <= self.SESSION_EXPIRE_MINUTES <= 1440:
+            return [
                 ConfigurationIssue(
-                    "JWT_SECRET_KEY",
-                    "secret_too_short",
-                    "JWT 簽署金鑰需至少 32 字元；使用者登入實作仍待完成",
+                    "SESSION_EXPIRE_MINUTES", "invalid_duration", "有效期間需介於 1 至 1440 分鐘"
                 )
-            )
-        if not 1 <= self.JWT_EXPIRE_MINUTES <= 1440:
-            issues.append(
-                ConfigurationIssue(
-                    "JWT_EXPIRE_MINUTES", "invalid_duration", "有效期間需介於 1 至 1440 分鐘"
-                )
-            )
-        return issues
+            ]
+        return []
 
     def _cron_issues(self) -> list[ConfigurationIssue]:
         if len(self.CRON_SECRET.get_secret_value().strip()) < 16:

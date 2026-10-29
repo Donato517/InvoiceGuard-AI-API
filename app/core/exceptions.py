@@ -75,6 +75,13 @@ class ExternalServiceError(AppError):
     code = "EXTERNAL_SERVICE_ERROR"
 
 
+class ServiceUnavailableError(AppError):
+    """本站依賴的服務（例如資料庫設定）暫時無法使用。"""
+
+    status_code = 503
+    code = "SERVICE_UNAVAILABLE"
+
+
 # 框架層 HTTP 錯誤對應的錯誤代碼（例如路由不存在 → NOT_FOUND）
 _HTTP_STATUS_CODES = {
     401: "UNAUTHORIZED",

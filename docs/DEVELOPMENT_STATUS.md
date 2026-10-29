@@ -1,10 +1,10 @@
 # 開發狀態與工作邊界
 
-更新：2026-10-26。本文是目前狀態摘要，歷史聊天、檔名或 TODO 不代表功能完成；修改能力時必須同步本表、實作與測試。
+更新：2026-10-29。本文是目前狀態摘要，歷史聊天、檔名或 TODO 不代表功能完成；修改能力時必須同步本表、實作與測試。
 
 ## 本站角色
 
-API 維持自己的 Vercel／DB 模組，是共用 Schema／Alembic 的唯一管理者。已有：DB 模組、Vercel 模組（檔案存取）、執行環境設定檢查、Cron 驗證、DTO／Protocol；尚未完成：一般使用者 JWT 登入（/api/v1/auth）、發票端點、CRUD Repository／Service 與部門授權；排程 job 為 stub。
+API 維持自己的 Vercel／DB 模組，是共用 Schema／Alembic 的唯一管理者。已有：DB 模組、Vercel 模組（檔案存取）、執行環境設定檢查、Cron 驗證、DTO／Protocol、前台登入 Session（/api/v1/auth）、手機上傳發票（辨識、查重、送出，見下表）；尚未完成：發票列表／詳情、一般 CRUD Repository／Service 與部門功能授權；排程 job 為 stub。
 
 ## 共同狀態（三站相同）
 
@@ -13,13 +13,13 @@ API 維持自己的 Vercel／DB 模組，是共用 Schema／Alembic 的唯一管
 | AI 規範入口 | AGENTS.md（三站架構、共同規則、本站現況）＋ CLAUDE.md 匯入；2026-10-26 已提交並 Push 至 feature/python-web |
 | 契約／分層檢查 | scripts/check_project.py + contracts/project-contract.json；只做無副作用靜態分析 |
 | 本機三站／手機 HTTPS | InvoiceGuard-STARTUP 的 SETUP.cmd／START.cmd；三站各在自己的 CMD 視窗執行並自動重載本站 app/ 的 Python |
-| 本機雲端設定 | START 以 Vercel CLI 讀取 ADMIN／API 各自專案的 Production 設定，只把 DATABASE_URL、S3_*、SUPABASE_STORAGE_BUCKET 注入本機該站程序（2026-10-25 核定）；前台不取得。本機 ADMIN／API 的資料就是正式資料 |
+| 本機雲端設定 | START 以 Vercel CLI 讀取 ADMIN／API 各自專案的 Production 設定，把 DATABASE_URL、S3_*、SUPABASE_STORAGE_BUCKET 注入本機該站程序（2026-10-25 核定）；ADMIN 與 API 另各自注入自己專案的 GOOGLE_CLOUD_PROJECT_ID、GOOGLE_CLOUD_LOCATION、DOCUMENT_AI_PROCESSOR_ID、GOOGLE_SERVICE_ACCOUNT_JSON、GEMINI_API_KEY、GROQ_API_KEY（API 2026-10-28、ADMIN 2026-10-29 核定，不視為本機禁用機密；ADMIN 缺 AI 設定時 START 只提示、照常啟動）；前台不取得。本機 ADMIN／API 的資料就是正式資料 |
 | 共用常數 | app/core/constants.py（2026-10-26，三站相同）：正式／本機網址、網站名稱、圖示、搜尋引擎設定 |
 | 搜尋引擎 | 三站 noindex：網頁 meta 與 vercel.json 的 X-Robots-Tag（後者部署後生效）；robots.txt 不封鎖抓取 |
-| 模組 | ADMIN／API 的 DB 模組（app/db）與 Vercel 模組（檔案存取，app/integrations/supabase_storage.py）可直接操作正式 DB／Storage；ADMIN 的 /dev 示範檔案使用的就是這兩個模組。第一階段契約 DataService／FileService／get_storage_client() 尚未接線，呼叫時拋出 ModuleNotReadyError |
+| 模組 | ADMIN／API 的 DB 模組（app/db）與 Vercel 模組（檔案存取，app/integrations/supabase_storage.py）可直接操作正式 DB／Storage；ADMIN 的 /dev 示範檔案使用的就是這兩個模組。AI 模組（integrations 的 document_ai／gemini／groq／chat_models）2026-10-29 起兩站同版，由兩站的 tests/unit/test_shared_integrations.py 比對一致。第一階段契約 DataService／FileService／get_storage_client() 尚未接線，呼叫時拋出 ModuleNotReadyError |
 | Schema／部門 | 既有 ORM 為草案；StoredFile、version 與部門模型尚待設計，未與雲端結構核對 |
 | 授權 | APP_ENV=local 不跳過登入（唯一例外：ADMIN 本機 /dev 示範檔案）；OperationContext 不可直接信任請求宣告的身分／權限 |
-| 模型整合 | 尚未串接；舊 Blob 保留名稱不代表遷移 |
+| 模型整合 | API 已串接：Document AI（OCR）與 Groq gpt-oss（20B／120B）用於手機與電腦上傳辨識（2026-10-29）；Gemini 模組已建、對話待儲值後驗證。ADMIN 有同版 AI 模組與設定（2026-10-29），尚未接線任何功能；前台不直接串接模型；舊 Blob 保留名稱不代表遷移 |
 | CI | 已有單站無公司密鑰工作流程（.github/workflows/project-checks.yml）；2026-10-26 已 Push 至 feature/python-web，遠端執行結果須到 GitHub Actions 確認 |
 
 ## 本站狀態
@@ -28,8 +28,12 @@ API 維持自己的 Vercel／DB 模組，是共用 Schema／Alembic 的唯一管
 |---|---|
 | DB 模組 | 程序有合法 DATABASE_URL 即可使用（本機與雲端），TLS／NullPool 保留；`db/session.py`、`db_connection_repository`／`db_connection_service`（唯讀 SELECT 1，目前只有測試呼叫）。2026-10-25 以 START 注入的 API 自己的值實測 SELECT 1 = 1 |
 | Vercel 模組（檔案存取） | `app/integrations/supabase_storage.py`（與 ADMIN 位元組相同）；API venv 實測上傳／列表／下載／移動／刪除成功。第一階段契約 FileService 尚未接線 |
-| 本機取得設定 | START 經 Vercel CLI 讀取 invoice-guard-ai-api 專案並只注入 API 程序；六項設定皆可讀取 |
+| 本機取得設定 | START 經 Vercel CLI 讀取 invoice-guard-ai-api 專案並只注入 API 程序：DB／S3 六項加 Google AI 五項與 GROQ_API_KEY（服務帳號 JSON 由 START 壓成單行；ADMIN 不取得）。2026-10-28 以 START 的讀值函式實測十一項皆取得，注入獨立 API 程序後環境檢查通過、DB SELECT 1 = 1、Document AI Processor 為 OCR_PROCESSOR／ENABLED，Gemini Key 唯讀列模型 200 |
+| Google AI 模組 | `app/integrations/document_ai.py`（OCR）、`app/integrations/gemini.py`（對話），2026-10-28；離線測試 45 案。以 START 相同注入實測：Document AI 辨識前台 `app/static/img/reference_invoice.jpg` 成功（1 頁、29 行、平均信心 0.915）。Gemini 的 Key、模型（gemini-3.8-flash）與請求格式經免費的 models.get／countTokens 確認正確，但 generateContent 回 402 RESOURCE_EXHAUSTED「預付額度已用完」，需在 AI Studio 儲值後再驗證對話。Document AI 由手機上傳辨識使用（見「手機上傳發票」），Gemini 尚無端點 |
+| Groq 模組 | `app/integrations/groq.py`（2026-10-28）：預設／識別用 gpt-oss-20b，advanced=True 或 RAG／討論用 gpt-oss-120b；離線測試 29 案。實測：使用者範例 qwen 呼叫成功；Document AI OCR（reference_invoice.jpg）→ gpt-oss-20b（recognition、JSON 模式）回傳合法 JSON，字軌 TL、號碼 28281500、三聯式正確，空白欄位為 null，但「一〇八年九、十月份」的 tax_period 回成 202109（應為 201909），民國年換算不可直接信任模型。START 把 GROQ_API_KEY 注入 API（2026-10-28 核定；重新 SETUP／START 後生效）；2026-10-29 起 ADMIN 也由 START 從自己的 Vercel 專案注入同一組 AI 設定，兩站各用各的值 |
+| 手機上傳發票 | 2026-10-29，依 v1.4（使用者已在正式 DB 執行 v1.3→v1.4 ALTER）。`/api/v1/invoices/recognize`：每次請求經 auth_service 核對 Session；JPG／PNG 或單頁 PDF（電腦上傳頁）4 MB 以內（以檔頭判斷；PDF 超過一頁回 400 INVOICE_PDF_MULTIPAGE，依 v1.4 invoice_files 每張發票一個目前檔案）；先確認 Storage／Document AI／Groq 已設定，再寫 `ai_recognition_logs`（pending）→ 檔案存 invoices bucket `{user_id}/INVOICES_{台灣時間 YYYYMMDDHHMMSS}_{recognition_id}.jpg|png|pdf` → OCR → gpt-oss-20b（JSON；OCR＋模型總時限 25 秒，每次呼叫以剩餘時間為逾時上限，剩餘 8 秒以上才改 120B 再試一次）→ `utils/invoice_format` 換算民國日期、期別（偶數月 YYYYMM）、金額、字軌號碼、統編檢查碼，產生檢核提醒（不阻擋）→ 記錄 success／partial／failed。`/check-duplicate`：字軌＋號碼＋賣方統編，已作廢（voided）不計。`POST /api/v1/invoices`：辨識 1 小時內、本人、未送出才可送出；advisory lock 後再查重，重複回 409；同交易建立 invoices（pending_department_approval、submission_round 1、部門取 Session 選取部門、validation_results）、invoice_items、invoice_files（指向辨識時的同一物件）、與 AI 原值不同欄位的 invoice_field_reviews（使用者修改過的欄位，含刪除的 AI 明細 `deleted_item_{n}`，供審核勾選）、invoice_changes（核對頁逐次修改，含改了又改回；前台紀錄須從 AI 原值接續到送出值，否則 400 INVOICE_CHANGES_INVALID；有差異沒紀錄的欄位由 API 補一筆）、invoice_status_history，回填辨識紀錄；明細以 source_line_no 對應 AI 明細，回應附 modified_fields。逾時未送出的影像在之後的辨識請求順帶刪除（每次最多 10 筆）並記 source_deleted_at，沒有排程。離線測試 95 案（替身，不連正式服務）；repository SQL 以 PostgreSQL 解析器檢查語法；尚未在正式 DB／Storage 實測，需使用者以手機經 START 測試 |
 | Cron | `/api/cron/*` 需 CRON_SECRET；本機不載入該機密，只以測試替身驗證；job 為 stub |
+| 前台登入 | `/api/v1/auth/login`／`me`／`logout`：`auth_service` → `user_repository`／`session_repository`（固定 SQL；v1.3 `user_accounts`、`user_profiles`、`v_user_departments`、`user_sessions`）。Argon2id 用 pwdlib（與 ADMIN 同版）。登入資格依 v1.3 後續接線第 2 點；Session 預設主要部門，有效 `SESSION_EXPIRE_MINUTES`（預設 60）；登入成功寫 `last_login_at`、密碼錯誤 `failed_login_count`+1。`/me` 每次核對摘要、到期、撤銷、`credential_version`、帳號／profile、選取部門並更新 `last_seen_at`。2026-10-28 離線測試通過；使用者以手機經 START 實測登入成功（正式 DB） |
 
 開發者不取得 Vercel／Supabase 管理員權限；雲端變數更新後，雲端需重新部署、本機需重新 START 才會套用。部署、執行 migration、修改正式資料、Commit／Merge／Push 需使用者明確授權。
 

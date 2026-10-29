@@ -52,7 +52,8 @@ def test_dotenv_is_not_loaded_by_default(tmp_path: Path, monkeypatch: pytest.Mon
 
 
 @pytest.mark.parametrize(
-    "name", [name for name in Settings.CLOUD_SECRET_FIELDS if name != "DATABASE_URL"]
+    "name",
+    [name for name in Settings.CLOUD_SECRET_FIELDS if name not in Settings.LOCAL_INJECTED_FIELDS],
 )
 def test_local_rejects_company_secret_fields(name: str) -> None:
     report = make_settings(**{name: "synthetic-secret"}).check_configuration("local")
@@ -138,7 +139,7 @@ def test_database_rejects_tls_downgrade(mode: str) -> None:
         ("SUPABASE_URL", "http://storage.example.invalid"),
         ("SUPABASE_STORAGE_BUCKET", "../other"),
         ("SUPABASE_SECRET_KEY", ""),
-        ("JWT_SECRET_KEY", "short"),
+        ("SESSION_EXPIRE_MINUTES", 0),
     ],
 )
 def test_cloud_checks_each_required_capability(field: str, value: str) -> None:
@@ -188,12 +189,16 @@ def test_api_does_not_require_admin_session_secret() -> None:
     assert "SESSION_SECRET_KEY" not in Settings.model_fields
 
 
+def test_auth_does_not_require_signing_secret() -> None:
+    # v1.3 Session 為不透明 Token＋DB 摘要，不需要 JWT 簽章金鑰
+    assert cloud_settings(JWT_SECRET_KEY="").check_configuration("auth").is_valid
+
+
 @pytest.mark.parametrize(
     "values,scope",
     [
-        ({"JWT_SECRET_KEY": "short"}, "auth"),
-        ({"JWT_EXPIRE_MINUTES": 0}, "auth"),
-        ({"JWT_EXPIRE_MINUTES": 1441}, "auth"),
+        ({"SESSION_EXPIRE_MINUTES": 0}, "auth"),
+        ({"SESSION_EXPIRE_MINUTES": 1441}, "auth"),
         ({"CRON_SECRET": "short"}, "cron"),
     ],
 )

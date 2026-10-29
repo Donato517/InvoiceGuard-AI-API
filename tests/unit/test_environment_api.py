@@ -69,6 +69,31 @@ def test_api_capability_report_does_not_duplicate_secret_issue() -> None:
     assert len(issues) == 1
 
 
+def test_start_injected_google_ai_settings_are_allowed_locally() -> None:
+    # 2026-10-28 使用者核定：START 注入本機 API 的 Google AI 設定不視為本機禁用機密
+    configuration = make_settings(
+        GEMINI_API_KEY="synthetic-gemini-key",
+        GOOGLE_SERVICE_ACCOUNT_JSON='{"type": "service_account"}',
+        GOOGLE_CLOUD_PROJECT_ID="synthetic-project",
+        GOOGLE_CLOUD_LOCATION="us",
+        DOCUMENT_AI_PROCESSOR_ID="0123456789abcdef",
+    )
+    report = configuration.check_environment()
+    assert report["configuration_valid"]
+    local = configuration.check_configuration("local")
+    assert not any(issue.code == "cloud_secret_in_local" for issue in local.issues)
+
+
+def test_secrets_not_injected_by_start_are_still_rejected_locally() -> None:
+    configuration = make_settings(
+        GEMINI_API_KEY="synthetic-gemini-key", CRON_SECRET="synthetic-cron-secret"
+    )
+    report = configuration.check_environment()
+    assert not report["configuration_valid"]
+    fields = {issue["field"] for issue in report["issues"] if issue["severity"] == "error"}
+    assert fields == {"CRON_SECRET"}
+
+
 def test_api_main_rejects_invalid_environment_before_app_assembly(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

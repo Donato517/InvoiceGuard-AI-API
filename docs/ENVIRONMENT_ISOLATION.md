@@ -8,7 +8,8 @@
 - ADMIN／API 的 Settings 精確排除 `DATABASE_URL` 的本機機密拒絕，仍驗證 PostgreSQL 格式與 TLS；`S3_ENDPOINT_URL`、`S3_REGION`、`S3_ACCESS_KEY_ID`、`S3_SECRET_ACCESS_KEY`、`SUPABASE_STORAGE_BUCKET` 不在核定機密清單，本機可載入。
 - 這些值由 START 以團隊的 `VERCEL_TOKEN.txt` 經 Vercel CLI 從 ADMIN／API 各自專案的 **Production** 設定讀取，只注入本機該站程序記憶體；前台不取得，也不產生 `.env`。
 - 因此本機 ADMIN／API 連到正式 DB／Storage，本機寫入就是正式資料寫入。
-- 其他機密（`SESSION_SECRET_KEY`、`CRON_SECRET`、`JWT_SECRET_KEY`、模型 Key、`SUPABASE_SECRET_KEY`、`DATABASE_URL_UNPOOLED` 等）出現在本機程序環境時，站台仍拒絕啟動；所以 ADMIN 本機無法登入、API 本機無法通過 Cron 驗證。
+- ADMIN 與 API 另由 START 各自注入自己專案的 Google Document AI／Gemini 五項：`GOOGLE_CLOUD_PROJECT_ID`、`GOOGLE_CLOUD_LOCATION`、`DOCUMENT_AI_PROCESSOR_ID`、`GOOGLE_SERVICE_ACCOUNT_JSON`（多行 JSON 由 START 壓成單行）、`GEMINI_API_KEY`，以及 Groq 金鑰 `GROQ_API_KEY`（API 2026-10-28、ADMIN 2026-10-29 核定：START 注入站程序的雲端設定是必要設定，不視為本機禁用機密）。前台不取得；ADMIN 只有 DB／S3 為啟動必要，AI 設定缺少時 START 只提示、照常啟動。ADMIN／API Settings 的 `LOCAL_INJECTED_FIELDS`（`DATABASE_URL`、`GEMINI_API_KEY`、`GOOGLE_SERVICE_ACCOUNT_JSON`、`GROQ_API_KEY`）不回本機機密拒絕；其餘三項 Google 設定不是機密欄位。
+- 其他機密（`SESSION_SECRET_KEY`、`CRON_SECRET`、`JWT_SECRET_KEY`、`OPENAI_API_KEY` 等其他模型 Key、`SUPABASE_SECRET_KEY`、`DATABASE_URL_UNPOOLED` 等）出現在本機程序環境時，站台仍拒絕啟動；所以 ADMIN 依 `SESSION_SECRET_KEY` 簽署的舊管理者 cookie 登入（`require_admin` 路徑）在本機無法使用、API 本機無法通過 Cron 驗證。
 
 ## 設定來源
 
