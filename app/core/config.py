@@ -91,6 +91,10 @@ class Settings(BaseSettings):
     GOOGLE_SERVICE_ACCOUNT_JSON: SecretStr = Field(
         default_factory=lambda: SecretStr(""), repr=False
     )
+    # Agent Platform（原 Vertex AI）向量：沿用上方專案與服務帳號；不是機密，未設定時用預設值（與 ADMIN 相同）
+    VERTEX_EMBEDDING_MODEL: str = "gemini-embedding-2"
+    # 上限 2,000 為 pgvector 的 vector 型別 HNSW 索引限制；換模型或維度須全部重算向量
+    VERTEX_EMBEDDING_DIMENSIONS: int = Field(default=1536, ge=128, le=2000)
     EINVOICE_APP_ID: SecretStr = Field(default_factory=lambda: SecretStr(""), repr=False)
     EINVOICE_API_KEY: SecretStr = Field(default_factory=lambda: SecretStr(""), repr=False)
     BLOB_READ_WRITE_TOKEN: SecretStr = Field(default_factory=lambda: SecretStr(""), repr=False)

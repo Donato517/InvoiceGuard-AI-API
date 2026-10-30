@@ -2,6 +2,7 @@
 
 > 狀態：**草案**。放入 InvoiceGuard-AI-API 的 `docs/`，實作前須與 `docs/API_CONVENTIONS.md`、`docs/MODULE_CONTRACT.md` 對齊（路徑前綴、分頁、錯誤格式、授權）。
 > 原型使用 `/api/kb`、`/api/qa`；本專案的 API 前綴為 `/api/v1`，下列路徑請依慣例調整，並把 `companyId` 改由登入身分（JWT）取得，不信任請求自報。
+> 2026-10-30 更新：本檔早於 v1.5。資料表已在 v1.5 規劃（`rag_*`），向量模組已完成，檢索條件改為五項；與下文不同處以 [RAG 開發說明](RAG_DEVELOPMENT.md) 為準。
 
 ## 與現有專案的落差（動工前先決定）
 
