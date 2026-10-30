@@ -975,3 +975,17 @@ STARTUP 42 筆清單只在讀取時處理 CRLF 並核對路徑與雜湊，原檔
 
 - API 程式未修改；新增 tests/unit/test_shared_integrations.py（與 ADMIN 相同）：supabase_storage.py 與四個 AI 模組檔在兩站同目錄時逐位元組比對，單站 checkout 時 skip。共同規範（三站 AGENTS 共同區塊）改為 ADMIN 與 API 都由 START 注入 AI 設定，agent_rules_sha256 三站同步。
 - 驗證：check_project（--project-root）PASS；pytest 726 passed、14 skipped；ruff、environment --check 通過。
+
+## 2026-10-30 Claude：新增 Agent Platform 向量模組
+
+- 使用者要求：ADMIN 測試通過後同步 API。新增 app/integrations/vertex_embedding.py 與 tests/unit/test_vertex_embedding.py，兩站逐位元組相同並列入 test_shared_integrations；Settings、.env.example、tests/conftest.py 加 VERTEX_EMBEDDING_MODEL、VERTEX_EMBEDDING_DIMENSIONS。未改 document_ai／gemini／groq，Vercel 與 START 不用改。
+- Claude 回報的離線驗證（本輪結果另記 REVIEW_FIX_LOG）：check_project（--project-root）PASS；pytest ADMIN 1493 passed、9 skipped，API 961 passed、14 skipped；ruff check／format --check、environment --check 通過。
+- Claude 回報的真實呼叫（本輪未重新驗證；兩站各以自己的 Vercel 設定，只送合成文字，不寫 DB）：gemini-embedding-2 回 1536 維；相關句相似度 0.7948、無關句 0.5795；100 段（每段 725 字）ADMIN 6.3 秒、API 4.48 秒；超過 8,192 token 回 embedding_invalid_input。
+- 未驗證：長時間配額、真實文件的檢索品質、部署後的雲端執行。未接線功能、未改 DB、未 Commit。
+
+## 2026-10-30 Claude：Codex 修正後複驗並新增 RAG 開發說明
+
+- 新增 docs/RAG_DEVELOPMENT.md（ADMIN、API 內容相同），AGENTS.md 與 MODULE_CONTRACT.md 加入連結；API 的 KNOWLEDGE_API_CONTRACT.md 加註過期提示。程式未再修改。
+- 離線複驗：check_project（--project-root）PASS；pytest ADMIN 1519 passed、9 skipped，API 987 passed、14 skipped；ruff check／format --check、environment --check 通過。
+- 真實呼叫（Codex 修正後的模組，兩站各以自己的 Vercel 設定，只送合成文字，不寫 DB）：gemini-embedding-2 回 1536 維；相關句相似度 0.7948、無關句 0.5795；100 段（每段 725 字）ADMIN 4.25 秒、API 4.09 秒；超過 8,192 token 回 embedding_invalid_input。
+- 未驗證：長時間配額、真實文件的檢索品質、部署後的雲端執行。未接線功能、未改 DB、未 Commit。

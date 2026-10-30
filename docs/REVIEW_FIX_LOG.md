@@ -464,3 +464,17 @@
 - 發佈快照 pytest：894 passed、14 skipped，0 failed／errors；僅既有 Starlette/httpx 棄用警告。沙箱內 Windows 程序內 IPC 無法完成的執行已停止，正式驗證使用一般程序權限，外部服務仍由 fixture 禁止。
 - check_project.py --project-root ..：PASS；Ruff lint：PASS；format --check：101 檔通過；environment --check：configuration_valid=true、connectivity_checked=false。API 沒有樣板檢查。
 - 提交前檢查已涵蓋新增檔案與三模組逐位元組一致性；未連正式 DB／Storage／Google／Gemini／Groq，未執行 migration、手動部署或變更三站 venv。
+
+## 2026-10-30 Codex：Agent Platform 向量模組獨立審查與修正
+
+- 起始核對：兩站 vertex_embedding.py、test_vertex_embedding.py、test_shared_integrations.py 的六份 SHA256 全部符合使用者指定值，之後才修改。兩站共用模組／測試持續逐位元組相同。
+- **P2｜錯誤資訊可能帶出合成敏感字串**：不合法 Bearer 權杖先驗格式；Google status／reason 改為固定識別碼允許清單；Unicode 與自訂 transport 的意外例外轉為不含原文／權杖的固定 EmbeddingError。保留已知錯誤對應，不使用 GEMINI_API_KEY。
+- **P2｜總預算不完整**：HTTP 成功回覆與整批解析完成後再驗 deadline；權杖鎖以剩餘預算取得，超大／非有限預算在任何請求前拒絕。保留預設 25 秒與每階段 httpx timeout 上限；屬合作式 deadline，不宣稱可強制中止忽略 timeout 的外部 transport。
+- **P2｜延後發現失敗，佇列繼續送出**：以完成事件觀察錯誤，按原始索引保存輸出；worker 失敗即發出停止訊號，取消尚未開始的 future，不再送出後續 HTTP，也不回傳部分向量。仍每批最多 8 個 worker，沒有重試或新增批次端點。
+- **P3｜異常資料型別逃出固定錯誤介面**：補 project／model、token_uri 型別檢查與巨大向量整數轉換保護。新增回歸含正負無限值、重新導向、無效 task／Unicode；Settings 維度 128～2000 與兩個公開設定維持不變。
+- 文件：DEVELOPMENT_STATUS、TEST_REPORT 的既有雲端／效能數字明確標成 Claude 回報，本輪未重新驗證；沒有宣稱接線、部署或修改 DB。AGENTS 共同區塊與 contracts 未改。
+- 向量測試原有 65 項保留，新增 26 項，共 91 項通過；初版獨立反例 16 failed／66 passed 已保留。五種專案外突變各觸發 1 failed／90 passed、0 errors，分別抓到 autoTruncate、完成順序、併發上限、token_uri 與向量長度。
+- 完整回歸：ADMIN 1519 passed／9 skipped；API 987 passed／14 skipped；與 Claude 回報的基準各相差新增 26 項。check_project --project-root、Ruff lint／format、environment --check、git diff --check 通過；只有既有 Starlette/httpx warning。環境 CLI configuration_valid=true、connectivity_checked=false。
+- 最初兩站各 56 個治理 setup error 是 Windows 長路徑複製問題；保留輸出，改用專案外新 basetemp 的 Windows 長路徑格式後完整通過，未修改治理測試或期待值。略過均屬治理規則不適用／symlink 權限，不是向量或手機辨識案例。
+- SHA256：vertex_embedding.py 由 52e6a14639f2b46631cf3258df5c4f83b12274ed9d0fbec3513cee5a687df451 改為 aa7f6612907c168e6f40ed62eaf18afa57dacf4cb1c7f0fbe531b4ba28ed5fa0；test_vertex_embedding.py 由 787fec5bc38af9dc95a2998919214049849d062d8d57666d57092c8ddb0593b6 改為 6e547ceee446b379c8b537fba0e5e37815e61bce3b41dddef6533125e0a98903；shared 測試維持 fd2b0a725bf992b0591e332d16a71da2ec5980e6e09db3e37a75e3c44ee03bc1。兩站相同。
+- 輸出位於專案外暫存 ivx-20261030-170851（REVIEW.md、TEST_RESULTS.md、SHA256 與 JUnit）；沒有改既有 reviews／REVIEW 指令、前台、STARTUP、其他 AI／Storage 模組、requirements 或快照，沒有讀真實秘密／發票，沒有正式服務呼叫、安裝／升級、部署、migration、Stage／Commit／Push 或切換分支。

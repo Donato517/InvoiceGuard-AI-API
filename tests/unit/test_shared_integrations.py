@@ -24,6 +24,7 @@ SHARED_FILES = (
     "app/integrations/document_ai_fewshot.py",
     "app/integrations/gemini.py",
     "app/integrations/groq.py",
+    "app/integrations/vertex_embedding.py",
 )
 
 

@@ -101,7 +101,7 @@ InvoiceGuard-AI-API/
 │   │       └── invoices.py       #     前台發票（TODO）
 │   ├── schemas/                  # Pydantic 請求 / 回應模型（common 分頁／錯誤格式、auth、user、invoice、data、files）
 │   ├── services/                 # 商業邏輯層（data / file 為第一階段契約，未接線；db_connection 為唯讀 SELECT 1 檢查）
-│   ├── integrations/             # ai_client、einvoice_client、document_ai（Google Document AI OCR）、gemini（Gemini 對話）、groq（Groq gpt-oss 對話，20B／120B 依情境）、chat_models（對話共用型別）、supabase_storage（Vercel 模組：檔案存取，與 ADMIN 相同）、storage_client（第一階段契約，未接線）、vercel（執行環境資訊與設定檢查）
+│   ├── integrations/             # ai_client、einvoice_client、document_ai（Google Document AI OCR）、gemini（Gemini 對話）、groq（Groq gpt-oss 對話，20B／120B 依情境）、chat_models（對話共用型別）、vertex_embedding（Agent Platform 向量，與 ADMIN 相同；尚未接線功能）、supabase_storage（Vercel 模組：檔案存取，與 ADMIN 相同）、storage_client（第一階段契約，未接線）、vercel（執行環境資訊與設定檢查）
 │   ├── jobs/                     # 排程工作（runner.py 為共用執行機制；目前為 stub）
 │   ├── db/                       # ★ 資料庫模組（說明見 app/db/README.md）
 │   │   ├── README.md             #   Schema 總覽、ERD、命名規則、Migration 流程
@@ -246,6 +246,7 @@ Vercel Function 的檔案系統**只有 `/tmp` 可寫入**，且執行個體結�
 | `GROQ_API_KEY` | Groq 金鑰；`integrations/groq.py` 使用；本機由 START 注入 | 雲端 ✓ |
 | `GROQ_DEFAULT_MODEL` / `GROQ_ADVANCED_MODEL` | Groq 預設（預設／識別）與進階（RAG／討論／進階備用）模型 | `openai/gpt-oss-20b` / `openai/gpt-oss-120b` |
 | `GOOGLE_CLOUD_PROJECT_ID` / `GOOGLE_CLOUD_LOCATION` / `DOCUMENT_AI_PROCESSOR_ID` / `GOOGLE_SERVICE_ACCOUNT_JSON` | Google Document AI（OCR）專案、區域、Processor ID、服務帳號完整 JSON；本機由 START 注入；`integrations/document_ai.py` 使用 | 雲端 ✓ |
+| `VERTEX_EMBEDDING_MODEL` / `VERTEX_EMBEDDING_DIMENSIONS` | Agent Platform 向量模型與維度（不是機密）；`integrations/vertex_embedding.py` 使用，沿用上方專案與服務帳號 | `gemini-embedding-2` / `1536` |
 | `OPENAI_API_KEY` | 雲端模型設定；尚未串接 | 選填 |
 | `EINVOICE_APP_ID` / `EINVOICE_API_KEY` | 財政部平台憑證；僅啟用該整合才需要 | 選填 |
 | `BLOB_READ_WRITE_TOKEN` | 保留既有 Blob 設定名稱，不自動選用 | 選填 |

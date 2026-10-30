@@ -26,6 +26,7 @@ AI 入口見 [AGENTS.md](../AGENTS.md)／[CLAUDE.md](../CLAUDE.md)；
 | Google Document AI 模組（OCR） | `integrations/document_ai.py`：`DocumentAIClient.from_settings().process(content, mime_type, timeout_seconds=None)` 回傳全文、各頁各行文字／信心值／正規化位置框與原始回應；`describe_processor()` 唯讀查 Processor。服務帳號換權杖並在程序內暫存；錯誤為 `document_ai_*` 固定代碼。不寫 DB |
 | Groq 模組（對話） | `integrations/groq.py`：`GroqClient.from_settings().chat(messages, system_instruction=None, purpose="default", advanced=False, json_output=False, max_tokens=None, timeout_seconds=None)`；`timeout_seconds` 為呼叫端剩餘時間，不超過預設 45 秒，0 以下直接回 `groq_timeout`。情境：default／recognition 用 `GROQ_DEFAULT_MODEL`（gpt-oss-20b），`advanced=True` 改用 `GROQ_ADVANCED_MODEL`（gpt-oss-120b，進階備用）；rag／discussion 用 120B。`json_output` 要求只回 JSON 物件；回答不含推理過程；錯誤為 `groq_*` 固定代碼。不寫 DB |
 | Google Gemini 模組（對話） | `integrations/gemini.py`：`GeminiClient.from_settings().chat(messages, system_instruction=None)` 回傳回答、模型、結束原因與 token 用量；Key 只放標頭；模型由 `GEMINI_MODEL` 設定；錯誤為 `gemini_*` 固定代碼（Google status 優先於 HTTP 狀態碼）。不寫 DB |
+| Agent Platform 向量模組 | `integrations/vertex_embedding.py`：`VertexEmbeddingClient.from_settings().embed_texts(texts, task="document" 或 "query", title=None, timeout_seconds=None)` 回傳 `EmbeddingBatch`（vectors、model、dimensions），順序與輸入相同；以服務帳號呼叫 `embedContent`（location 固定 global），多筆併發上限 8，autoTruncate 固定 false，一筆失敗即整批失敗、不自動重試；與 ADMIN 相同檔案（2026-10-30），只負責呼叫與解析、不寫 DB，錯誤為 `embedding_*` 固定代碼。尚未接線任何功能；用法見 [RAG 開發說明](RAG_DEVELOPMENT.md) |
 | 真實 CRUD、業務檔案端點 | 一般 CRUD（發票列表／詳情等）尚未實作；目前會寫入業務資料的 HTTP 端點只有手機上傳發票（`POST /api/v1/invoices/recognize`、`POST /api/v1/invoices`） |
 | StoredFile 表、發票 version 欄位 | 尚未建立，API 後續統一規劃 Schema；ADMIN 同步 |
 
@@ -84,6 +85,7 @@ from app.services.file_service import FileService, get_file_service
 | GROQ_API_KEY | Groq 金鑰；`integrations/groq.py` 使用。列入 LOCAL_INJECTED_FIELDS；本機由 START 注入（2026-10-28 核定） |
 | GROQ_DEFAULT_MODEL／GROQ_ADVANCED_MODEL | Groq 預設模型 openai/gpt-oss-20b、進階模型 openai/gpt-oss-120b（不是機密） |
 | GEMINI_MODEL | Gemini 對話模型名稱，不是機密；預設 gemini-3.8-flash（gemini-2.5-flash 已不開放給新專案） |
+| VERTEX_EMBEDDING_MODEL／VERTEX_EMBEDDING_DIMENSIONS | `integrations/vertex_embedding.py` 使用，不是機密；預設 gemini-embedding-2／1536（維度 128～2000）。沿用 GOOGLE_CLOUD_PROJECT_ID 與 GOOGLE_SERVICE_ACCOUNT_JSON，服務帳號需有 Agent Platform User；換模型或維度須全部重算向量 |
 | OPENAI_API_KEY | 雲端選填；模型服務尚未串接 |
 | AI_API_KEY / EINVOICE_APP_ID / EINVOICE_API_KEY / BLOB_READ_WRITE_TOKEN | 保留既有名稱並遮罩，未啟用的整合不要求填寫 |
 | VERCEL | 平台自動標記，不是認證憑證，不得用來保護公開 API |
