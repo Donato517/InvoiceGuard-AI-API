@@ -1,6 +1,6 @@
 """
 模組名稱：app.routers.v1.invoices
-功能說明：前台使用者的發票 API——手機上傳流程（辨識、必填檢核、查重、送出）；列表與詳情尚未實作。
+功能說明：前台使用者的發票 API——手機上傳流程（辨識、必填檢核、業務警示預覽、查重、送出）；列表與詳情尚未實作。
 路由前綴：/api/v1/invoices
 注意事項：
     - 全部需 Authorization: Bearer <session_token>，每次請求經 auth_service 重新核對 Session。
@@ -19,8 +19,14 @@ from app.schemas.invoice_upload import (
     InvoiceSubmitRead,
     InvoiceSubmitRequest,
     RequiredCheckRead,
+    WarningCheckRead,
 )
-from app.services import auth_service, invoice_required_service, invoice_upload_service
+from app.services import (
+    auth_service,
+    invoice_required_service,
+    invoice_upload_service,
+    invoice_warning_service,
+)
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
 
@@ -63,6 +69,20 @@ def check_required_fields(
     """
     auth_service.resolve_session(db, token)
     return invoice_required_service.check_required(body)
+
+
+@router.post("/check-warnings", response_model=WarningCheckRead)
+def check_invoice_warnings(
+    body: Annotated[
+        dict[str, Any],
+        Body(description="核對頁目前的欄位值（同 POST /invoices，可缺漏或格式錯誤）"),
+    ],
+    token: BearerToken,
+    db: OptionalDbSession,
+) -> WarningCheckRead:
+    """業務警示預覽：未來日期與金額一致性，規則與正式送出相同；只是提醒，不寫入任何資料，也不阻擋送出。"""
+    auth_service.resolve_session(db, token)
+    return invoice_warning_service.preview_warnings(body)
 
 
 @router.post("", response_model=InvoiceSubmitRead, status_code=status.HTTP_201_CREATED)
