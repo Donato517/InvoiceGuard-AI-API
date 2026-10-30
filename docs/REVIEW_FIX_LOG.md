@@ -430,3 +430,37 @@
 - **P3｜現況仍寫 GROQ_API_KEY「只注入本機 API」**：AGENTS 現況與 DEVELOPMENT_STATUS 的 Groq 列改為「START 注入 API；2026-10-29 起 ADMIN 也由 START 從自己 Vercel 專案注入同一組 AI 設定，兩站各用各的值」，歷史實測紀錄保留原日期。
 - Codex P2（本站不讀的機密名稱只警告）為三站既有兩級設計，未修改；說明見 ADMIN REVIEW_FIX_LOG 同日紀錄。
 - 驗證：check_project（--project-root）PASS；test_project_governance、test_shared_integrations 176 passed、14 skipped。
+
+## 2026-10-30 Document AI 三模組自 ADMIN 同步
+
+- 依使用者要求完整複製 ADMIN 的 document_ai.py、document_ai_evidence.py、document_ai_fewshot.py 到 API app/integrations。API 原先只有舊版 document_ai.py，沒有另兩檔；API 開始時工作樹乾淨，ADMIN 原有未提交成果保留。
+- 逐檔 SHA-256 證明 ADMIN 來源、API 最終來源及受測副本相同，三模組邏輯未改寫。既有 invoice_upload_service、router、Schema、Settings、integrations/__init__.py 與 DB／Storage 均未修改。
+- 補 API 必要 runtime 依賴 Pillow==13.0.0，安裝到 API venv。環境變數沿用 API 自己既有名稱，不增加名稱、不共用 ADMIN 憑證、不修改 START／Vercel。
+- 兩站 shared integration 測試恢復三模組逐位元組比對，同時驗證公開建構與類別身分；同步 ADMIN 的 83 項三模組測試。API 新增 2 項真實同步 adapter 接原辨識端點案例，涵蓋成功與 Google 429、回應欄位、既有 log 格式及共用剩餘預算。
+- 同步前完整基準 724 passed、15 skipped、1 failed（舊 API OCR 與 ADMIN 不同）；同步後完整 815 passed、15 skipped、0 failed／errors（40.93s）。ADMIN 共用整合 15 passed；6 種匯入順序、compileall、跨三站 check_project 0 issues、API Ruff lint／99 檔格式、pip check、環境 CLI 均通過。只有既有 Starlette/httpx warning。
+- 全程合成 DB／Storage／模型替身與 MockTransport，測試子程序清除繼承設定並禁網；真實 Google／DB／Storage、雲端與辨識率未驗。沒有部署、migration、正式資料操作、Commit 或 Push。詳細紀錄見 docs/DOCUMENT_AI_SYNC_20261030.md 及 docs/reviews/document-ai-sync-20261030。
+
+## 2026-10-30 Claude：OCR client 關閉與 Document AI 模組說明修正
+
+- 來源：Claude 獨立檢驗 docs/reviews/claude-review-20261030-130853（REVIEW.md 的 E-1、D-1）。
+- **E-1｜既有缺陷：`recognize()` 不關閉 OCR client**：`DocumentAIClient.from_settings()` 每次請求自建 httpx 連線池（`_owns_http=True`），原程式成功或失敗都沒有關閉（同步前的舊 client 也沒有 `close()`）。改為建立後以單一 `try/finally` 包住 Groq 設定檢查、辨識紀錄新增、Storage、OCR、模型整理到錯誤紀錄，任何結果都呼叫一次 `ocr_client.close()`；OCR 未設定時沒有建立 client，不寫資料。注入的 HTTP client 仍由呼叫端管理（模組既有語意）。錯誤對應、交易順序、紀錄內容、預算與服務檢查順序都不變。
+- 回歸：`FakeOcr` 新增 `close()` 計數；新增 `test_recognize_closes_ocr_client_on_every_outcome`（成功、OCR 失敗、Storage 失敗、模型未設定、模型錯誤、多頁 PDF、無文字、新增紀錄失敗，共 8 項，皆恰好關閉一次）與 `test_recognize_does_not_close_when_ocr_is_not_configured`；`test_recognize_with_synced_document_ai_adapter` 補驗請求後 adapter 已關閉（再呼叫回 `document_ai_failed:ClientClosed`）且注入的 HTTP client 未被關閉。
+- **D-1｜共用模組說明寫成 ADMIN 專用**：document_ai.py 檔頭改為兩站共用、各讀本站設定；原「Official references are recorded in README.md」（兩站 README 都沒有）改為直接列出 Google 官方文件網址；`DEFAULT_TIMEOUT_SECONDS` 註解改為低於兩站函式上限（ADMIN 30 秒、API 60 秒，依兩站 vercel.json maxDuration）。document_ai_fewshot.py 的 `FewShotClient.from_settings` 說明改為沿用本站 GEMINI_API_KEY／GEMINI_MODEL。只改註解／docstring，程式邏輯未動；改完由 API 複製到 ADMIN，三檔兩站逐位元組相同（document_ai `12559e0a…2169c`、evidence `93123881…ab472` 未變、fewshot `c2df0727…3cb6`）。
+- 驗證（禁網、無公司設定包裝器，命令與輸出見 docs/reviews/fix-ocr-close-20261030-133215）：API 完整 pytest 825 passed、14 skipped；check_project 單站與 --project-root 皆 PASS；Ruff lint 與 99 檔格式通過；環境 CLI configuration_valid=true；pip check 無破損。只有既有 Starlette/httpx warning。上一輪獨立反例中 3 項依預期改為失敗：「從不關閉」舊行為、同一 adapter 跨兩次請求重用、HEAD 舊 client 沒有 `close()`。
+- 範圍外未改：GroqClient 也會自建 httpx client 且沒有 `close()`，屬另一個既有問題。未部署、migration、正式資料操作、Commit 或 Push。
+
+## 2026-10-30 Claude：OCR client 關閉失敗不蓋過原結果（Codex R-1／P3）
+
+- 來源：Codex 獨立檢驗 docs/reviews/codex-close-review-20261030-142404（R-1）。前一段紀錄的「任何結果都呼叫一次 close」成立，但「錯誤對應都不變」只在 close 正常完成時成立：`finally` 直接呼叫 `ocr_client.close()`，若關閉時拋錯（例如底層 socket 的 OSError），會蓋過原本的 503／502 或成功結果，成功路徑還會讓辨識紀錄停在 pending。
+- 處理：新增 `_close_ocr_client()`，`finally` 改呼叫它；關閉失敗只以 `logger.warning` 記例外型別（不記例外內容），主流程的結果或原本錯誤照常繼續。正常關閉路徑與業務流程不變；DocumentAIClient 三模組未修改，兩站仍逐位元組相同。
+- 回歸：`FakeOcr` 可設定 `close_error`；新增 `test_recognize_close_failure_keeps_original_result`（成功 200、OCR 失敗 502 OCR_FAILED、模型未設定 503 SERVICE_UNAVAILABLE），驗證回應、辨識紀錄、只關閉一次，以及警告只含 OSError 型別、不含例外內容。在隔離副本改回未防護的 `ocr_client.close()`，這 3 項全部失敗。
+- 驗證（禁網、無公司設定包裝器，見 docs/reviews/fix-ocr-close-20261030-133215 的 r2-* 輸出）：API 完整 pytest 828 passed、14 skipped；check_project 單站與 --project-root PASS；Ruff lint 與 99 檔格式通過；環境 CLI configuration_valid=true；ADMIN shared integration 15 passed。只有既有 Starlette/httpx warning。未部署、migration、正式資料操作、Commit 或 Push。
+
+## 2026-10-30 Codex：Document AI 發佈前檢查
+
+- 依使用者要求準備提交與 Push；程式範圍為既有 Document AI 三模組、相容性修正、Pillow 依賴及離線測試，evidence／Few-Shot 未新增業務接線。
+- 發佈文件補明歷史驗證與目前兩站同步狀態；原始 reviews/ 命令、JUnit、JSON、副本與提示文字保留本機，不納入版本控制，也不將本機證據連結宣稱為 GitHub 可用資源。
+- 原工作樹完整測試會複製未追蹤的 docs/reviews，遇到 Windows 長路徑複製錯誤；未放寬或修改測試。改以 Git HEAD 加明確提交清單，在專案外建立排除暫存證據、dotenv、Git 與 venv 的三站發佈快照，用既有 venv 及原本禁網／DB 替身執行完整 tests。
+- 發佈快照 pytest：894 passed、14 skipped，0 failed／errors；僅既有 Starlette/httpx 棄用警告。沙箱內 Windows 程序內 IPC 無法完成的執行已停止，正式驗證使用一般程序權限，外部服務仍由 fixture 禁止。
+- check_project.py --project-root ..：PASS；Ruff lint：PASS；format --check：101 檔通過；environment --check：configuration_valid=true、connectivity_checked=false。API 沒有樣板檢查。
+- 提交前檢查已涵蓋新增檔案與三模組逐位元組一致性；未連正式 DB／Storage／Google／Gemini／Groq，未執行 migration、手動部署或變更三站 venv。

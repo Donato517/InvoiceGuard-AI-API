@@ -15,3 +15,5 @@ pwdlib[argon2]==0.3.1
 google-auth==2.62.0
 # 手機上傳發票影像（multipart/form-data）；版本與前台、ADMIN 一致
 python-multipart==0.0.32
+# 與 ADMIN 的 Document AI 證據裁圖／Few-Shot 模組相同依賴
+Pillow==13.0.0

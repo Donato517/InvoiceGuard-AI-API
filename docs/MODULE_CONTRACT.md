@@ -1,5 +1,7 @@
 # API Vercel / DB 模組與契約
 
+> 2026-10-30：由 ADMIN 同步 Document AI 三模組並保留原 OCR 介面；Pillow 為新增必要依賴，環境名稱不變。後續 evidence／Few-Shot 的來源版本與授權責任沿用 ADMIN 契約，未自動啟用於既有上傳。見 [同步檢驗](DOCUMENT_AI_SYNC_20261030.md)。
+
 AI 入口見 [AGENTS.md](../AGENTS.md)／[CLAUDE.md](../CLAUDE.md)；
 本文件保留第一階段的實作範圍與歷史說明，目前能力以 [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) 為準。
 新增或同步契約後執行 [無密鑰契約／分層檢查](PROJECT_CHECKS.md)。
