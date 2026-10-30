@@ -6,6 +6,7 @@
 """
 
 import json
+import logging
 import math
 import re
 import time
@@ -17,6 +18,7 @@ from typing import Any
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -125,6 +127,13 @@ class FakeOcr:
     page_count: int = 1
     calls: list[str] = field(default_factory=list)
     timeouts: list[float | None] = field(default_factory=list)
+    closed: int = 0
+    close_error: Exception | None = None
+
+    def close(self) -> None:
+        self.closed += 1
+        if self.close_error:
+            raise self.close_error
 
     def process(
         self, content: bytes, mime_type: str, *, timeout_seconds: float | None = None
@@ -1072,6 +1081,176 @@ def test_recognize_passes_remaining_time_to_ocr_and_model(services: dict[str, An
     (ocr_timeout,) = services["ocr"].timeouts
     model_timeout = services["model"].calls[0]["timeout_seconds"]
     assert 0 < model_timeout <= ocr_timeout <= invoice_upload_service.RECOGNITION_DEADLINE_SECONDS
+
+
+@pytest.mark.parametrize("google_status,http_status", [(200, 200), (429, 503)])
+def test_recognize_with_synced_document_ai_adapter(
+    services: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    google_status: int,
+    http_status: int,
+) -> None:
+    """以真實同步 adapter 接既有端點；DB／Storage／模型維持合成替身。"""
+    requests: list[httpx.Request] = []
+
+    def google(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        payload = {
+            "document": {
+                "text": OCR_TEXT,
+                "pages": [{"pageNumber": 1, "layout": {"confidence": 0.91}}],
+            }
+        }
+        if google_status != 200:
+            payload = {"error": {"status": "RESOURCE_EXHAUSTED"}}
+        return httpx.Response(google_status, json=payload)
+
+    with (
+        httpx.Client(transport=httpx.MockTransport(google)) as http,
+        document_ai.DocumentAIClient(
+            project_id="synthetic",
+            location="us",
+            processor_id="123",
+            access_token_provider=lambda: "synthetic",
+            http=http,
+        ) as adapter,
+    ):
+        monkeypatch.setattr(
+            invoice_upload_service.DocumentAIClient, "from_settings", lambda: adapter
+        )
+        response = recognize()
+        # service 關閉 adapter；注入的 HTTP client 仍由呼叫端（本測試）管理
+        assert not http.is_closed
+        with pytest.raises(DocumentAIError) as closed:
+            adapter.process(JPEG, "image/jpeg")
+        assert (closed.value.code, closed.value.detail) == ("document_ai_failed", "ClientClosed")
+    assert response.status_code == http_status
+    assert len(requests) == 1
+    assert json.loads(requests[0].content)["fieldMask"] == document_ai.PROCESS_FIELD_MASK
+    assert max(requests[0].extensions["timeout"].values()) <= 25
+    (log,) = services["records"].logs.values()
+    if google_status == 200:
+        body = response.json()
+        assert body["recognition"]["ocr_provider"] == "google_document_ai"
+        assert body["recognition"]["ocr_confidence"] == 0.91
+        assert log["raw_response"]["ocr"]["page_count"] == 1
+        assert log["raw_response"]["ocr"]["text"] == OCR_TEXT
+        assert not services["records"].invoices
+    else:
+        assert log["result_status"] == "failed"
+        assert log["error_message"] == "document_ai_quota_exceeded:RESOURCE_EXHAUSTED"
+        assert not services["model"].calls
+
+
+def _fail_insert(*args: Any, **kwargs: Any) -> Any:
+    raise RuntimeError("synthetic insert failure")
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "success",
+        "ocr_error",
+        "storage_error",
+        "model_not_configured",
+        "model_error",
+        "multi_page_pdf",
+        "no_text",
+        "insert_failure",
+    ],
+)
+def test_recognize_closes_ocr_client_on_every_outcome(
+    services: dict[str, Any], monkeypatch: pytest.MonkeyPatch, case: str
+) -> None:
+    """OCR client 每次辨識都恰好關閉一次，包含 OCR 之前與之後的各種失敗。"""
+    content, content_type, filename = JPEG, "image/jpeg", "a.jpg"
+    if case == "ocr_error":
+        services["ocr"].error = DocumentAIError("document_ai_timeout")
+    elif case == "storage_error":
+        services["storage"].put_error = StorageError("storage_denied", "AccessDenied")
+    elif case == "model_not_configured":
+
+        def not_configured() -> Any:
+            raise GroqError("groq_not_configured")
+
+        monkeypatch.setattr(invoice_upload_service.GroqClient, "from_settings", not_configured)
+    elif case == "model_error":
+        services["model"].replies = [GroqError("groq_denied")]
+    elif case == "multi_page_pdf":
+        services["ocr"].page_count = 2
+        content, content_type, filename = PDF, "application/pdf", "a.pdf"
+    elif case == "no_text":
+        services["ocr"].text = "  "
+    elif case == "insert_failure":
+        monkeypatch.setattr(recognition_repository, "insert", _fail_insert)
+
+    if case == "insert_failure":
+        with pytest.raises(RuntimeError):
+            recognize(content, content_type, filename)
+    else:
+        response = recognize(content, content_type, filename)
+        assert (response.status_code == 200) is (case == "success")
+    assert services["ocr"].closed == 1
+
+
+@pytest.mark.parametrize(
+    "case,status,code",
+    [
+        ("success", 200, None),
+        ("ocr_error", 502, "OCR_FAILED"),
+        ("model_not_configured", 503, "SERVICE_UNAVAILABLE"),
+    ],
+)
+def test_recognize_close_failure_keeps_original_result(
+    services: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    case: str,
+    status: int,
+    code: str | None,
+) -> None:
+    """close() 本身失敗只記例外型別，不蓋過辨識結果或原本的錯誤，辨識紀錄照常完成。"""
+    services["ocr"].close_error = OSError("synthetic-close-detail")
+    if case == "ocr_error":
+        services["ocr"].error = DocumentAIError("document_ai_timeout")
+    elif case == "model_not_configured":
+
+        def not_configured() -> Any:
+            raise GroqError("groq_not_configured")
+
+        monkeypatch.setattr(invoice_upload_service.GroqClient, "from_settings", not_configured)
+
+    with caplog.at_level(logging.WARNING, logger=invoice_upload_service.__name__):
+        response = recognize()
+
+    assert response.status_code == status
+    if code:
+        assert response.json()["error"]["code"] == code
+    assert services["ocr"].closed == 1
+    if case == "success":
+        (log,) = services["records"].logs.values()
+        assert log["result_status"] == "success"
+    elif case == "ocr_error":
+        (log,) = services["records"].logs.values()
+        assert (log["result_status"], log["error_message"]) == ("failed", "document_ai_timeout")
+    warnings = [r.getMessage() for r in caplog.records if r.name == invoice_upload_service.__name__]
+    assert "關閉 OCR client 失敗：OSError" in warnings
+    assert all("synthetic-close-detail" not in message for message in warnings)
+
+
+def test_recognize_does_not_close_when_ocr_is_not_configured(
+    services: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """設定不足時根本沒有建立 OCR client，也不寫任何資料。"""
+
+    def not_configured() -> Any:
+        raise DocumentAIError("document_ai_not_configured")
+
+    monkeypatch.setattr(invoice_upload_service.DocumentAIClient, "from_settings", not_configured)
+    response = recognize()
+    assert response.status_code == 503
+    assert services["ocr"].closed == 0
+    assert not services["records"].logs
 
 
 def test_fallback_is_skipped_when_too_little_time_remains() -> None:

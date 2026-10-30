@@ -1,5 +1,7 @@
 # InvoiceGuard-AI-API：AI 開發入口
 
+> 2026-10-30 最新核定：依使用者要求由 ADMIN 同步 Document AI 呼叫、影像證據與 Few-Shot 三模組，兩站三檔須逐位元組相同；新增 Pillow，沿用本站既有設定。舊上傳 OCR→Groq 流程保留，evidence／Few-Shot 尚未接線業務功能。見 [同步檢驗](docs/DOCUMENT_AI_SYNC_20261030.md)。
+
 本站是後端 API，使用 Python 3.12、FastAPI、SQLAlchemy／psycopg；ASGI 入口為 `app.main:app`。負責前台 API、第三方串接與排程，並擁有自己的 Vercel／DB 模組。登入授權與一般資料／檔案服務的完成狀態須讀狀態文件，不能把契約或 TODO 當成實作。
 
 依序閱讀：`README.md` → `docs/DEVELOPMENT_STATUS.md` → `docs/ARCHITECTURE.md` → `docs/CODING_CONVENTIONS.md` → `docs/MODULE_CONTRACT.md` → `docs/API_CONVENTIONS.md`。資料存取另讀 `app/db/README.md`；環境設定另讀 `docs/ENVIRONMENT_ISOLATION.md`。

@@ -1,5 +1,7 @@
 # 系統架構說明 — InvoiceGuard-AI-API
 
+> 2026-10-30：integrations 新增與 ADMIN 相同的 document_ai_evidence／document_ai_fewshot，document_ai 升級為同一副本。既有 router／service／DB 分層與上傳流程未改；新增兩模組尚未接線。見 [同步檢驗](DOCUMENT_AI_SYNC_20261030.md)。
+
 AI 先讀根目錄 [AGENTS.md](../AGENTS.md)（Claude 見 [CLAUDE.md](../CLAUDE.md)），
 再依 [開發狀態](DEVELOPMENT_STATUS.md) 區分已完成能力與目標設計。
 本文件描述分工，不代表外部服務或每個流程均已接線。日常三站啟動與全名別名見 [README](../README.md)，

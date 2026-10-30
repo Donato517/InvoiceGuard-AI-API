@@ -200,53 +200,57 @@ def recognize(
         ocr_client = DocumentAIClient.from_settings()
     except DocumentAIError as exc:
         raise _ocr_error(exc) from None
+    # OCR client 自建連線池，只在本次辨識使用；不論成功、失敗或中途例外都關閉（關閉失敗不蓋過結果）
     try:
-        model_client = GroqClient.from_settings()
-    except GroqError as exc:
-        raise _model_error(exc) from None
-    recognition_id = uuid4()
-    key = invoice_storage_key(current.user_id, recognition_id, mime_type, now_utc())
-    try:
-        created_at = recognition_repository.insert(
-            db,
-            recognition_id=recognition_id,
-            source_storage_path=key,
-            ai_provider=groq.PROVIDER,
-            requested_by=current.user_id,
-        )
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
-
-    try:
-        storage.put(key, content, content_type=mime_type)
-        ocr = ocr_client.process(content, mime_type, timeout_seconds=_remaining(started))
-        # 先判斷頁數：多頁 PDF 不論有沒有文字都回 INVOICE_PDF_MULTIPAGE
-        if mime_type == "application/pdf" and len(ocr.pages) > 1:
-            raise AppError(
-                "PDF 只能有一頁：一份 PDF 一張發票，請分開上傳", code="INVOICE_PDF_MULTIPAGE"
+        try:
+            model_client = GroqClient.from_settings()
+        except GroqError as exc:
+            raise _model_error(exc) from None
+        recognition_id = uuid4()
+        key = invoice_storage_key(current.user_id, recognition_id, mime_type, now_utc())
+        try:
+            created_at = recognition_repository.insert(
+                db,
+                recognition_id=recognition_id,
+                source_storage_path=key,
+                ai_provider=groq.PROVIDER,
+                requested_by=current.user_id,
             )
-        if not ocr.text.strip():
-            raise AppError("影像中沒有辨識到文字，請重新拍攝", code="INVOICE_TEXT_NOT_FOUND")
-        data, reply, fallback_error = _extract_fields(model_client, ocr.text, started)
-    except StorageError as exc:
-        _record_failure(db, recognition_id, _log_code(exc.code, exc.detail))
-        raise _storage_error(exc) from None
-    except DocumentAIError as exc:
-        _record_failure(db, recognition_id, _log_code(exc.code, exc.detail))
-        raise _ocr_error(exc) from None
-    except GroqError as exc:
-        _record_failure(db, recognition_id, _log_code(exc.code, exc.detail))
-        raise _model_error(exc) from None
-    except _InvalidReplyError:
-        _record_failure(db, recognition_id, "groq_invalid_reply")
-        raise ExternalServiceError(
-            "AI 無法整理這張發票的欄位，請重新拍攝或稍後再試", code="AI_RECOGNITION_FAILED"
-        ) from None
-    except AppError as exc:
-        _record_failure(db, recognition_id, exc.code.lower())
-        raise
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+
+        try:
+            storage.put(key, content, content_type=mime_type)
+            ocr = ocr_client.process(content, mime_type, timeout_seconds=_remaining(started))
+            # 先判斷頁數：多頁 PDF 不論有沒有文字都回 INVOICE_PDF_MULTIPAGE
+            if mime_type == "application/pdf" and len(ocr.pages) > 1:
+                raise AppError(
+                    "PDF 只能有一頁：一份 PDF 一張發票，請分開上傳", code="INVOICE_PDF_MULTIPAGE"
+                )
+            if not ocr.text.strip():
+                raise AppError("影像中沒有辨識到文字，請重新拍攝", code="INVOICE_TEXT_NOT_FOUND")
+            data, reply, fallback_error = _extract_fields(model_client, ocr.text, started)
+        except StorageError as exc:
+            _record_failure(db, recognition_id, _log_code(exc.code, exc.detail))
+            raise _storage_error(exc) from None
+        except DocumentAIError as exc:
+            _record_failure(db, recognition_id, _log_code(exc.code, exc.detail))
+            raise _ocr_error(exc) from None
+        except GroqError as exc:
+            _record_failure(db, recognition_id, _log_code(exc.code, exc.detail))
+            raise _model_error(exc) from None
+        except _InvalidReplyError:
+            _record_failure(db, recognition_id, "groq_invalid_reply")
+            raise ExternalServiceError(
+                "AI 無法整理這張發票的欄位，請重新拍攝或稍後再試", code="AI_RECOGNITION_FAILED"
+            ) from None
+        except AppError as exc:
+            _record_failure(db, recognition_id, exc.code.lower())
+            raise
+    finally:
+        _close_ocr_client(ocr_client)
 
     try:
         is_triplicate, invoice, printed, warnings = _build_recognition(data)
@@ -936,6 +940,14 @@ def _user_modifications(
         if (d.field_scope, d.line_no, d.field_name) not in last_value
     )
     return tuple(differences + deleted), tuple(changes)
+
+
+def _close_ocr_client(client: DocumentAIClient) -> None:
+    """關閉本次辨識的 OCR client；關閉失敗只記例外型別，不蓋過辨識結果或原本的錯誤。"""
+    try:
+        client.close()
+    except Exception as exc:
+        logger.warning("關閉 OCR client 失敗：%s", type(exc).__name__)
 
 
 def _confidence(ocr: OcrResult) -> float | None:

@@ -18,7 +18,8 @@ from app.core.config import Settings
 from app.integrations import document_ai
 from app.integrations.document_ai import DocumentAIClient, DocumentAIError
 
-TOKEN_URI = "https://oauth2.example.invalid/token"
+# 官方固定端點仍完全經 MockTransport，不會呼叫 Google。
+TOKEN_URI = "https://oauth2.googleapis.com/token"
 PROCESSOR_URL = (
     "https://us-documentai.googleapis.com/v1/projects/synthetic-project"
     "/locations/us/processors/0123456789abcdef"
@@ -145,7 +146,8 @@ def test_process_sends_document_and_parses_lines(service_account_json: str) -> N
     body = json.loads(process_request.content)
     assert base64.b64decode(body["rawDocument"]["content"]) == content
     assert body["rawDocument"]["mimeType"] == "image/jpeg"
-    assert body["skipHumanReview"] is True
+    # Google 已棄用 skipHumanReview；移除它不影響 InvoiceGuard 的審批狀態。
+    assert "skipHumanReview" not in body
     assert body["fieldMask"] == document_ai.PROCESS_FIELD_MASK
 
     assert result.text == TEXT
