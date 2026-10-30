@@ -1,5 +1,7 @@
 # InvoiceGuard-AI-API
 
+> 2026-10-30：已由 ADMIN 同步 Document AI 三模組，維持相同內容與既有 OCR 介面，補上 Pillow 依賴。evidence／Few-Shot 尚未接線上傳流程；詳見 [同步檢驗](docs/DOCUMENT_AI_SYNC_20261030.md)。
+
 InvoiceGuard AI 的後端 API 服務：提供前台（伺服器端）的 REST API、AI 發票風險分析、第三方 API 串接與每日排程；ADMIN 使用自己的 DB 模組，不經本站。
 
 | 項目 | 內容 |

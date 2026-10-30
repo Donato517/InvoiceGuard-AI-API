@@ -1,6 +1,6 @@
 """
 模組名稱：tests.unit.test_shared_integrations
-功能說明：ADMIN 與 API 共用的 integration 模組（Vercel 模組與 AI 模組）必須逐位元組相同。
+功能說明：ADMIN 與 API 共用的整合模組（含 Document AI 三模組）必須逐位元組相同。
 注意事項：
     - 兩站各有一份相同的本測試；只在兩站同在一個根目錄時比對，單站 checkout（例如 CI）明確 skip。
     - 修改其中一站的這些檔案時，必須把同一份內容複製到另一站，否則本測試失敗。
@@ -20,9 +20,27 @@ SHARED_FILES = (
     "app/integrations/supabase_storage.py",
     "app/integrations/chat_models.py",
     "app/integrations/document_ai.py",
+    "app/integrations/document_ai_evidence.py",
+    "app/integrations/document_ai_fewshot.py",
     "app/integrations/gemini.py",
     "app/integrations/groq.py",
 )
+
+
+def test_document_ai_bundle_retains_legacy_contract() -> None:
+    """三模組同步後保留原 OCR 介面，套件內共用相同類別身分。"""
+    from app.integrations import document_ai, document_ai_evidence, document_ai_fewshot
+
+    assert document_ai.OcrLine("text", None, ()).text == "text"
+    assert document_ai.OcrPage(1, None, None, None, ()).lines == ()
+    assert document_ai.OcrResult("text", (), {}).raw_response == {}
+    assert document_ai_evidence.OcrResult is document_ai.OcrResult
+    assert document_ai_fewshot.CropArtifact is document_ai_evidence.CropArtifact
+    assert callable(document_ai.DocumentAIClient.from_settings)
+    assert callable(document_ai.DocumentAIClient.process)
+    assert callable(document_ai.DocumentAIClient.describe_processor)
+    error = document_ai.DocumentAIError("document_ai_failed", "Synthetic")
+    assert (error.code, error.detail) == ("document_ai_failed", "Synthetic")
 
 
 def _digest(path: Path) -> str:
