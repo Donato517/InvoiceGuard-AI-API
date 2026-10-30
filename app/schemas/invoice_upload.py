@@ -193,6 +193,15 @@ class RequiredCheckRead(ContractModel):
     missing: tuple[MissingField, ...] = Field(description="全部必填缺漏；完整時為空")
 
 
+class WarningCheckRead(ContractModel):
+    """業務警示預覽結果；不寫入任何資料，警示只是人工核對提醒，不阻擋送出。"""
+
+    warnings: tuple[FieldWarning, ...] = Field(
+        description="目前欄位值可判斷出的警示（代碼同送出後寫入 validation_results 的 warnings）；欄位不足或格式錯誤的部分不判斷"
+    )
+    checked_on: date = Field(description="判斷「晚於今天」所用的台灣當天日期 YYYY-MM-DD")
+
+
 class ModifiedField(ContractModel):
     """使用者修改過的欄位（AI 原值與送出值不同）；同時寫入 invoice_field_reviews 待審核勾選。"""
 

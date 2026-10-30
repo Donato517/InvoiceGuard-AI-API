@@ -26,7 +26,7 @@ import logging
 import math
 import re
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import PurePath
 from typing import Any
@@ -67,7 +67,7 @@ from app.schemas.invoice_upload import (
     RecognizedInvoice,
     RecognizedItem,
 )
-from app.utils.datetime_utils import now_utc
+from app.utils.datetime_utils import now_utc, to_taipei
 from app.utils.invoice_format import (
     INVOICE_BUCKET,
     INVOICE_FILE_EXTENSIONS,
@@ -337,7 +337,11 @@ def check_duplicate(db: Session | None, request: DuplicateCheckRequest) -> Dupli
 
 
 def submit(
-    db: Session | None, current: SessionRead, request: InvoiceSubmitRequest
+    db: Session | None,
+    current: SessionRead,
+    request: InvoiceSubmitRequest,
+    *,
+    today: date | None = None,
 ) -> InvoiceSubmitRead:
     """送出使用者核對後的發票：建立發票（待單位核准）、明細、影像檔、欄位複核、修改歷程與狀態歷程。
 
@@ -345,6 +349,7 @@ def submit(
         db: 資料庫 Session；未設定資料庫時為 None。
         current: 已核對的登入者與選取部門。
         request: 使用者確認的欄位與本次辨識的 recognition_id。
+        today: 判斷「發票日期晚於今天」的台灣當天日期；預設取目前台灣日期，測試可注入。
 
     Returns:
         InvoiceSubmitRead: invoice_id、狀態、期別、送出時間、送出值的檢核提醒與使用者修改過的欄位。
@@ -381,15 +386,18 @@ def submit(
         )
         for line_no, item in enumerate(request.items, start=1)
     )
-    warnings = _consistency_warnings(
-        seller_tax_id=header.seller_tax_id,
-        buyer_tax_id=header.buyer_tax_id,
-        tax_type=header.tax_type,
-        sales=header.sales_amount,
-        tax=header.tax_amount,
-        total=header.total_amount,
-        line_amounts=[item.line_amount for item in items],
-    )
+    warnings = [
+        *future_date_warnings(header.invoice_date, today),
+        *_consistency_warnings(
+            seller_tax_id=header.seller_tax_id,
+            buyer_tax_id=header.buyer_tax_id,
+            tax_type=header.tax_type,
+            sales=header.sales_amount,
+            tax=header.tax_amount,
+            total=header.total_amount,
+            line_amounts=[item.line_amount for item in items],
+        ),
+    ]
     try:
         log = recognition_repository.lock_for_submit(db, request.recognition_id, current.user_id)
         if log is None:
@@ -734,6 +742,26 @@ def _recognized_items(value: object) -> list[RecognizedItem]:
         if any(fields.values()):
             items.append(RecognizedItem(line_no=len(items) + 1, **fields))
     return items
+
+
+def today_taipei(now: datetime | None = None) -> date:
+    """台灣（Asia/Taipei）的當天日期；now 必須含時區，預設取目前時間，測試可注入。"""
+    return to_taipei(now or now_utc()).date()
+
+
+def future_date_warnings(
+    invoice_date: date | None, today: date | None = None
+) -> list[FieldWarning]:
+    """發票日期晚於台灣當天日期時的提醒（只提醒，不阻擋送出）；日期未填或今天以前為空清單。"""
+    if invoice_date is None or invoice_date <= (today or today_taipei()):
+        return []
+    return [
+        FieldWarning(
+            field="invoice_date",
+            code="invoice_date_future",
+            message="發票日期晚於今天，請核對原始發票。",
+        )
+    ]
 
 
 def _consistency_warnings(
