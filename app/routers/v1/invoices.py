@@ -1,15 +1,15 @@
 """
 模組名稱：app.routers.v1.invoices
-功能說明：前台使用者的發票 API——手機上傳流程（辨識、查重、送出）；列表與詳情尚未實作。
+功能說明：前台使用者的發票 API——手機上傳流程（辨識、必填檢核、查重、送出）；列表與詳情尚未實作。
 路由前綴：/api/v1/invoices
 注意事項：
     - 全部需 Authorization: Bearer <session_token>，每次請求經 auth_service 重新核對 Session。
     - 流程：POST /recognize（影像 → 欄位與檢核提醒）→ 使用者核對 → POST /check-duplicate → POST /invoices 送出。
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 
-from fastapi import APIRouter, File, UploadFile, status
+from fastapi import APIRouter, Body, File, UploadFile, status
 
 from app.core.deps import BearerToken, OptionalDbSession
 from app.schemas.invoice_upload import (
@@ -18,8 +18,9 @@ from app.schemas.invoice_upload import (
     InvoiceRecognitionRead,
     InvoiceSubmitRead,
     InvoiceSubmitRequest,
+    RequiredCheckRead,
 )
-from app.services import auth_service, invoice_upload_service
+from app.services import auth_service, invoice_required_service, invoice_upload_service
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
 
@@ -46,6 +47,22 @@ def check_duplicate_invoice(
     """查重：系統內是否已有相同字軌＋號碼＋賣方統編、未作廢的發票。"""
     auth_service.resolve_session(db, token)
     return invoice_upload_service.check_duplicate(db, request)
+
+
+@router.post("/check-required", response_model=RequiredCheckRead)
+def check_required_fields(
+    body: Annotated[
+        dict[str, Any], Body(description="核對頁目前的欄位值（同 POST /invoices，可缺漏）")
+    ],
+    token: BearerToken,
+    db: OptionalDbSession,
+) -> RequiredCheckRead:
+    """必填欄位檢核：一次列出正式提交 InvoiceSubmitRequest 的所有必填缺漏；不寫入任何資料。
+
+    required_complete=true 只代表沒有必填缺漏，格式與金額仍由正式提交（422）與檢核提醒處理。
+    """
+    auth_service.resolve_session(db, token)
+    return invoice_required_service.check_required(body)
 
 
 @router.post("", response_model=InvoiceSubmitRead, status_code=status.HTTP_201_CREATED)

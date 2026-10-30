@@ -175,6 +175,24 @@ class InvoiceSubmitRequest(ContractModel):
     )
 
 
+class MissingField(ContractModel):
+    """必填缺漏的一個欄位；明細欄位以 line_no 指出第幾筆（送出內容的順序，從 1 開始）。"""
+
+    field: str = Field(description="欄位名稱，例如 invoice_number、item_name、items")
+    code: Literal["required_missing"] = Field(description="固定代碼：required_missing")
+    message: str = Field(description="給使用者看的中文提示")
+    line_no: int | None = Field(description="明細序號；表頭欄位為 None")
+
+
+class RequiredCheckRead(ContractModel):
+    """必填檢核結果；不寫入任何資料。"""
+
+    required_complete: bool = Field(
+        description="沒有任何必填缺漏。只代表必填欄位都有值，不代表格式、金額或整體資料有效，也不代表可以提交"
+    )
+    missing: tuple[MissingField, ...] = Field(description="全部必填缺漏；完整時為空")
+
+
 class ModifiedField(ContractModel):
     """使用者修改過的欄位（AI 原值與送出值不同）；同時寫入 invoice_field_reviews 待審核勾選。"""
 
