@@ -989,3 +989,6 @@ STARTUP 42 筆清單只在讀取時處理 CRLF 並核對路徑與雜湊，原檔
 - 離線複驗：check_project（--project-root）PASS；pytest ADMIN 1519 passed、9 skipped，API 987 passed、14 skipped；ruff check／format --check、environment --check 通過。
 - 真實呼叫（Codex 修正後的模組，兩站各以自己的 Vercel 設定，只送合成文字，不寫 DB）：gemini-embedding-2 回 1536 維；相關句相似度 0.7948、無關句 0.5795；100 段（每段 725 字）ADMIN 4.25 秒、API 4.09 秒；超過 8,192 token 回 embedding_invalid_input。
 - 未驗證：長時間配額、真實文件的檢索品質、部署後的雲端執行。未接線功能、未改 DB、未 Commit。
+## 2026-10-31 Claude：Storage 模組同步 ADMIN
+
+- `S3StorageClient.get` 新增選填 `timeout_seconds`，預設值不變，新增 test_get_uses_caller_timeout_and_defaults_to_module_timeout。API 全套 1074 passed、14 skipped、1 warning，check_project、ruff check、ruff format --check、git diff --check 皆 exit 0；未連線正式 Storage。

@@ -40,7 +40,7 @@ TOKEN_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 PROCESS_FIELD_MASK = "text,pages.pageNumber,pages.dimension,pages.layout,pages.lines"
 TOKEN_TIMEOUT = httpx.Timeout(15.0, connect=10.0)
 PROCESS_TIMEOUT = httpx.Timeout(45.0, connect=10.0)
-# 呼叫端未傳 timeout_seconds 時的總預算；低於兩站函式上限（ADMIN 30 秒、API 60 秒），保留解析與回應時間。
+# 呼叫端未傳 timeout_seconds 時的總預算；低於兩站函式上限（ADMIN、API 都是 60 秒），保留解析與回應時間。
 DEFAULT_TIMEOUT_SECONDS = 25.0
 TOKEN_REFRESH_MARGIN_SECONDS = 60
 # Application guard, not a promise about every processor's Google service limit.

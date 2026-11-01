@@ -478,3 +478,8 @@
 - 最初兩站各 56 個治理 setup error 是 Windows 長路徑複製問題；保留輸出，改用專案外新 basetemp 的 Windows 長路徑格式後完整通過，未修改治理測試或期待值。略過均屬治理規則不適用／symlink 權限，不是向量或手機辨識案例。
 - SHA256：vertex_embedding.py 由 52e6a14639f2b46631cf3258df5c4f83b12274ed9d0fbec3513cee5a687df451 改為 aa7f6612907c168e6f40ed62eaf18afa57dacf4cb1c7f0fbe531b4ba28ed5fa0；test_vertex_embedding.py 由 787fec5bc38af9dc95a2998919214049849d062d8d57666d57092c8ddb0593b6 改為 6e547ceee446b379c8b537fba0e5e37815e61bce3b41dddef6533125e0a98903；shared 測試維持 fd2b0a725bf992b0591e332d16a71da2ec5980e6e09db3e37a75e3c44ee03bc1。兩站相同。
 - 輸出位於專案外暫存 ivx-20261030-170851（REVIEW.md、TEST_RESULTS.md、SHA256 與 JUnit）；沒有改既有 reviews／REVIEW 指令、前台、STARTUP、其他 AI／Storage 模組、requirements 或快照，沒有讀真實秘密／發票，沒有正式服務呼叫、安裝／升級、部署、migration、Stage／Commit／Push 或切換分支。
+
+## 2026-10-31 Claude：Storage 模組同步 ADMIN
+
+- 問題：ADMIN 補舊檔雜湊時，Storage 單次讀取可等待 30 秒，會佔滿請求時間。處理：`S3StorageClient.get` 新增選填 `timeout_seconds`，預設仍是 30 秒，API 既有呼叫行為不變；app/integrations/supabase_storage.py 與 ADMIN 逐位元組相同。
+- 處理檔案：app/integrations/supabase_storage.py、tests/unit/test_supabase_storage.py。驗證結果見 [TEST_REPORT.md](TEST_REPORT.md)。

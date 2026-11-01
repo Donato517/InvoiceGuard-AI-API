@@ -139,6 +139,20 @@ def test_list_objects_follows_continuation_and_parses_xml() -> None:
     assert urllib.parse.parse_qs(second.query)["continuation-token"] == ["T1"]
 
 
+def test_get_uses_caller_timeout_and_defaults_to_module_timeout() -> None:
+    timeouts: list[float] = []
+
+    class RecordingOpener(FakeOpener):
+        def open(self, request: Any, timeout: float) -> FakeResponse:
+            timeouts.append(timeout)
+            return super().open(request, timeout)
+
+    storage = client(RecordingOpener((200, b"a"), (200, b"b")))
+    storage.get("a.txt", timeout_seconds=2.5)
+    storage.get("b.txt")
+    assert timeouts == [2.5, supabase_storage.TIMEOUT_SECONDS]
+
+
 def test_get_move_and_delete() -> None:
     opener = FakeOpener(
         (200, b"hello", {"Content-Type": "text/plain; charset=utf-8"}),
