@@ -483,3 +483,10 @@
 
 - 問題：ADMIN 補舊檔雜湊時，Storage 單次讀取可等待 30 秒，會佔滿請求時間。處理：`S3StorageClient.get` 新增選填 `timeout_seconds`，預設仍是 30 秒，API 既有呼叫行為不變；app/integrations/supabase_storage.py 與 ADMIN 逐位元組相同。
 - 處理檔案：app/integrations/supabase_storage.py、tests/unit/test_supabase_storage.py。驗證結果見 [TEST_REPORT.md](TEST_REPORT.md)。
+
+## 2026-11-02 Claude：我的發票列表 GET /api/v1/invoices
+
+- 新增：`app/schemas/invoice_list.py`、`app/services/invoice_list_service.py`、`invoice_repository` 的 `count_owned`／`list_owned_page`、路由 `list_invoices`、`tests/unit/test_invoice_list.py`（44 個）。
+- 開發中發現：列表服務若在 `SET TRANSACTION` 本身失敗時不 rollback，會留下進行中的交易；已比照詳情服務處理並加測試。
+- 驗證：pytest 1154 passed、14 skipped；ruff check／format 通過；隔離 PostgreSQL 15（Schema v1.8 去除 pgvector）以 TestClient＋真實 Session 驗證：他人與無提交者草稿不出現、總筆數一致、相同時間戳翻頁無重複遺漏、NULL 排最後、九個狀態篩選、非法狀態 422、無資料與他人視角；結束後無 idle in transaction。未驗：正式 DB、真實登入 Session、部署環境、效能（無 submitted_by 索引）。
+- 補充驗證（2026-11-02）：另以隔離 PostgreSQL 15（Schema v1.8 去除 pgvector、自簽 TLS）＋本機 API 程序（真實 auth_service 登入）＋本機前台程序經真實 HTTP 驗證：25 筆分頁 20＋5、approved 篩選 5 筆、他人只見自己的、無／無效 Token 回 401、非法 status 與 page_size=101 回 422、無 idle in transaction。仍非正式環境驗證。
