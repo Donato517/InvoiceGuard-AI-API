@@ -1,17 +1,20 @@
 """
 模組名稱：app.routers.v1.invoices
-功能說明：前台使用者的發票 API——手機上傳流程（辨識、必填檢核、業務警示預覽、查重、送出）；列表與詳情尚未實作。
+功能說明：前台使用者的發票 API——手機上傳流程（辨識、必填檢核、業務警示預覽、查重、送出）；提交者本人讀取詳情；列表尚未實作。
 路由前綴：/api/v1/invoices
 注意事項：
     - 全部需 Authorization: Bearer <session_token>，每次請求經 auth_service 重新核對 Session。
     - 流程：POST /recognize（影像 → 欄位與檢核提醒）→ 使用者核對 → POST /check-duplicate → POST /invoices 送出。
+    - GET /{invoice_id} 只回本人提交的發票；不存在與非本人都回 404。
 """
 
 from typing import Annotated, Any
+from uuid import UUID
 
 from fastapi import APIRouter, Body, File, UploadFile, status
 
 from app.core.deps import BearerToken, OptionalDbSession
+from app.schemas.invoice_detail import InvoiceDetailRead
 from app.schemas.invoice_upload import (
     DuplicateCheckRead,
     DuplicateCheckRequest,
@@ -23,6 +26,7 @@ from app.schemas.invoice_upload import (
 )
 from app.services import (
     auth_service,
+    invoice_detail_service,
     invoice_required_service,
     invoice_upload_service,
     invoice_warning_service,
@@ -94,5 +98,11 @@ def submit_invoice(
     return invoice_upload_service.submit(db, current, request)
 
 
+@router.get("/{invoice_id}", response_model=InvoiceDetailRead)
+def get_invoice(invoice_id: UUID, token: BearerToken, db: OptionalDbSession) -> InvoiceDetailRead:
+    """發票詳情：提交者本人讀取已送出的表頭、明細、修改對照、檢核警示與目前影像中繼資料（唯讀）。"""
+    current = auth_service.resolve_session(db, token)
+    return invoice_detail_service.get_invoice_detail(db, current, invoice_id)
+
+
 # TODO(JerryChien): GET  /invoices               我的發票列表（分頁、依狀態篩選）
-# TODO(JerryChien): GET  /invoices/{id}          發票詳情（含明細與檢核結果）

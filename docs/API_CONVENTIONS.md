@@ -123,7 +123,7 @@ Python `DeleteResult` 是內部服務結果，未來 HTTP DELETE 仍依本文件
 
 | code | HTTP | 說明 |
 |---|---|---|
-| `INVOICE_NOT_FOUND` | 404 | 發票不存在（範例，實作時確認） |
+| `INVOICE_NOT_FOUND` | 404 | 發票不存在（範例，實作時確認；GET /invoices/{id} 目前沿用通用 `NOT_FOUND`，不存在與非本人相同） |
 | `INVOICE_DUPLICATED` | 409 | 已有相同字軌＋號碼＋賣方統編且未作廢的發票（POST /invoices） |
 | `INVOICE_IMAGE_INVALID` | 400 | 不是 JPG／PNG／PDF、宣告類型與內容不符，或 OCR 無法處理這個檔案 |
 | `INVOICE_IMAGE_TOO_LARGE` | 400 | 檔案超過 4 MB |
@@ -138,6 +138,7 @@ Python `DeleteResult` 是內部服務結果，未來 HTTP DELETE 仍依本文件
 | `RECOGNITION_NOT_USABLE` | 409 | 這次辨識未完成或失敗 |
 | `INVOICE_ITEMS_INVALID` | 400 | 明細的 source_line_no 重複或不是這次辨識的 AI 明細 |
 | `INVOICE_CHANGES_INVALID` | 400 | 修改紀錄的欄位不存在，或無法從 AI 原值接續到送出值 |
+| `INVOICE_DATA_INVALID` | 500 | 已保存的發票 `validation_results` 結構不符（GET /invoices/{id}）；訊息不含資料內容 |
 
 Storage、Document AI、Groq 未設定或用量已滿時回通用 `SERVICE_UNAVAILABLE`（503）。
 
@@ -154,3 +155,21 @@ Storage、Document AI、Groq 未設定或用量已滿時回通用 `SERVICE_UNAVA
 - 路徑以 `/api/v1` 標示版本
 - **不相容變更**（刪欄位、改型別、改語意）才升 `v2`，並與 `v1` 並存一段時間
 - **相容變更**（新增欄位、新增端點）直接在 `v1` 進行
+
+## 9. 已實作端點：發票詳情
+
+`GET /api/v1/invoices/{invoice_id}`（後端已實作，只經離線單元測試；尚未對真實 PostgreSQL 驗證，前台詳情頁尚未對接）。
+
+- 驗證：沿用 Session（第 7 節）；未帶或無效的 Token 回 `401`。
+- 授權：只有有效登入的**提交者本人**（`invoices.submitted_by` = 登入者）可讀取，條件在 repository 查詢中落實。Session 目前選取的部門**不是**讀取過濾條件，本人換部門後仍可讀自己過去提交的發票；同部門其他使用者不能讀。尚無主管、代理人或財會的跨使用者讀取。
+- 回應：發票表頭、`items`（依 `line_no`）、`modified_fields`（沿用 POST 的 `ModifiedField`）、`warnings`（沿用 `FieldWarning`）、`file`（`mime_type`、`original_filename`、`size_bytes`、`version_no`；沒有目前影像時為 `null`）。金額與數量為保留資料庫小數位數的字串，NULL 回 `null`。`modified_fields` 內的值是送出時的標準值（數字去尾端 0），格式與金額欄位不同，不可用字串直接比較；沒有修改紀錄的欄位不代表已取得完整 AI 原值，本版不回傳 AI 原始快照。
+- 不回傳私有 Storage Key（`storage_path`、`bucket_name`）。目前**沒有**圖片實體讀取、修改（PATCH／PUT／DELETE）或退回重送端點。
+- 錯誤：
+
+| 情況 | HTTP | code |
+|---|---|---|
+| 發票不存在，或不是本人提交的（兩者回應相同） | 404 | `NOT_FOUND` |
+| `invoice_id` 不是 UUID | 422 | `VALIDATION_ERROR` |
+| 資料庫未設定 | 503 | `SERVICE_UNAVAILABLE` |
+| 已保存的 `validation_results` 結構不符 | 500 | `INVOICE_DATA_INVALID` |
+| 查詢失敗或 Session 進入時已在交易中等未預期狀況 | 500 | `INTERNAL_ERROR` |

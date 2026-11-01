@@ -5,7 +5,8 @@
 注意事項：
     - 以固定 SQL 存取，值一律綁定參數；只負責資料存取，不自行 commit（交易由 service 控制）。
     - 查重以字軌＋號碼＋賣方統一編號（索引 ix_invoices_number_supplier），已作廢（voided）者不計。
-    - 前台查詢必須帶 user_id／部門條件，避免越權讀取他人發票（列表、詳情尚未實作）。
+    - 前台查詢必須帶 user_id 條件，避免越權讀取他人發票；詳情（get_owned_*）只依 submitted_by 過濾，
+      不使用 Session 選取部門（列表尚未實作）。
 """
 
 import json
@@ -71,6 +72,35 @@ INSERT_CHANGE = text("""
 INSERT_STATUS_HISTORY = text("""
     INSERT INTO public.invoice_status_history (invoice_id, old_status, new_status, reason, changed_by)
     VALUES (:invoice_id, :old_status, :new_status, :reason, :changed_by)
+""")
+
+# 詳情讀取：多次 SELECT 之間以 REPEATABLE READ 取得同一個資料快照（必須是交易的第一個陳述式）
+SET_READ_SNAPSHOT = text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+SELECT_OWNED_INVOICE = text("""
+    SELECT invoice_id, status, submission_round, submitted_at, tax_period, invoice_track,
+           invoice_number, invoice_date, seller_tax_id, seller_name, buyer_tax_id, buyer_name,
+           tax_type, sales_amount, tax_amount, total_amount, total_amount_zh, validation_results
+    FROM public.invoices
+    WHERE invoice_id = :invoice_id AND submitted_by = :user_id
+""")
+SELECT_INVOICE_ITEMS = text("""
+    SELECT line_no, item_name, quantity, unit_price, line_amount
+    FROM public.invoice_items
+    WHERE invoice_id = :invoice_id
+    ORDER BY line_no
+""")
+SELECT_FIELD_REVIEWS = text("""
+    SELECT r.field_scope, i.line_no, r.field_name, r.ai_original_value, r.submitted_value
+    FROM public.invoice_field_reviews AS r
+    LEFT JOIN public.invoice_items AS i
+      ON i.invoice_id = r.invoice_id AND i.item_id = r.item_id
+    WHERE r.invoice_id = :invoice_id AND r.submission_round = :submission_round
+    ORDER BY (r.field_scope = 'item'), i.line_no, r.field_name, r.field_review_id
+""")
+SELECT_CURRENT_FILE = text("""
+    SELECT mime_type, original_filename, size_bytes, version_no
+    FROM public.invoice_files
+    WHERE invoice_id = :invoice_id AND is_current = true
 """)
 
 
@@ -289,5 +319,53 @@ def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
+class UnexpectedTransactionStateError(RuntimeError):
+    """呼叫端已在交易中，無法再設定隔離等級；repository 不處理（不 rollback）別人的交易。"""
+
+
+def begin_read_snapshot(db: Session) -> None:
+    """開始唯讀的 REPEATABLE READ 交易，後續 SELECT 看到同一份快照；須在全新的交易中呼叫。
+
+    PostgreSQL 要求 SET TRANSACTION 是交易的第一個陳述式。若 Session 已有進行中的交易（呼叫端
+    先前執行過陳述式且尚未結束），本函式不清除它，直接拋出 UnexpectedTransactionStateError，
+    由呼叫端決定如何處理。
+
+    Raises:
+        UnexpectedTransactionStateError: Session 已在交易中。
+    """
+    if db.in_transaction():
+        raise UnexpectedTransactionStateError("讀取快照必須在新的交易開始，但 Session 已在交易中")
+    db.execute(SET_READ_SNAPSHOT)
+
+
+def get_owned_invoice(db: Session, invoice_id: UUID, *, user_id: UUID) -> dict[str, Any] | None:
+    """讀取提交者本人的發票表頭；不存在或不是本人提交的回傳 None（兩者不可區分）。"""
+    row = (
+        db.execute(SELECT_OWNED_INVOICE, {"invoice_id": invoice_id, "user_id": user_id})
+        .mappings()
+        .one_or_none()
+    )
+    return dict(row) if row else None
+
+
+def list_items(db: Session, invoice_id: UUID) -> list[dict[str, Any]]:
+    """讀取發票明細，依 line_no 排序；呼叫前須已確認發票屬於本人。"""
+    rows = db.execute(SELECT_INVOICE_ITEMS, {"invoice_id": invoice_id}).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def list_field_reviews(
+    db: Session, invoice_id: UUID, *, submission_round: int
+) -> list[dict[str, Any]]:
+    """讀取指定輪次的欄位複核（使用者修改過的欄位）；明細欄位以 JOIN 取得 line_no，表頭欄位為 None。"""
+    params = {"invoice_id": invoice_id, "submission_round": submission_round}
+    return [dict(row) for row in db.execute(SELECT_FIELD_REVIEWS, params).mappings().all()]
+
+
+def get_current_file(db: Session, invoice_id: UUID) -> dict[str, Any] | None:
+    """讀取目前（is_current）的影像檔中繼資料；不含 bucket 與物件路徑。"""
+    row = db.execute(SELECT_CURRENT_FILE, {"invoice_id": invoice_id}).mappings().one_or_none()
+    return dict(row) if row else None
+
+
 # TODO(JerryChien): list_page(db, *, user_id, department_id, status, page, page_size) 我的發票列表
-# TODO(JerryChien): get_by_id(db, invoice_id, *, user_id) 發票詳情（含明細）
