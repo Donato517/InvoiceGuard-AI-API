@@ -46,3 +46,5 @@ API 維持自己的 Vercel／DB 模組，是共用 Schema／Alembic 的唯一管
 AGENTS.md 說明三站架構、閱讀順序與共同約定；README 說明使用方式；ARCHITECTURE／CODING_CONVENTIONS 管目錄與格式；ADMIN/API MODULE_CONTRACT 管型別與未實作邊界；API 的 app/db/README.md 管 Schema 權威。若文件與實際程式衝突，先指出並對齊，不能擅自繞過保護。單站 clone 無兄弟專案時仍可執行本站檢查；不得為讀取兄弟站而索取管理員 Token。
 
 精確檢查與限制見 [PROJECT_CHECKS.md](PROJECT_CHECKS.md)，實測結果見 [TEST_REPORT.md](TEST_REPORT.md)，修正紀錄見 [REVIEW_FIX_LOG.md](REVIEW_FIX_LOG.md)。
+
+我的發票列表（2026-11-02，分支 feature/c-invoice-list-api）：`GET /api/v1/invoices` 唯讀，只回提交者本人（`submitted_by`）的發票，支援 `page`、`page_size`、九個簽核狀態的 `status` 篩選（非法值 422），排序固定。離線單元測試通過，並以隔離 PostgreSQL（Schema v1.8，去除 pgvector）驗證真實 SQL；未對正式 DB／部署環境驗證。不含同部門列表、草稿管理、索引或 migration。

@@ -173,3 +173,21 @@ Storage、Document AI、Groq 未設定或用量已滿時回通用 `SERVICE_UNAVA
 | 資料庫未設定 | 503 | `SERVICE_UNAVAILABLE` |
 | 已保存的 `validation_results` 結構不符 | 500 | `INVOICE_DATA_INVALID` |
 | 查詢失敗或 Session 進入時已在交易中等未預期狀況 | 500 | `INTERNAL_ERROR` |
+
+## 10. 已實作端點：我的發票列表
+
+`GET /api/v1/invoices`（2026-11-02，C 組第一版；離線單元測試與隔離 PostgreSQL 驗證，尚未對正式環境驗證，前台列表頁對接見前台狀態文件）。
+
+- 驗證：沿用 Session；未帶或無效的 Token 回 `401`。
+- 授權：只回**提交者本人**（`invoices.submitted_by` = 登入者）的發票；總筆數與資料列用同一個條件。同部門其他人的案件、`submitted_by` 為 NULL 的草稿都不會出現。這是 C 組第一版的限定範圍，**不代表**團隊已核定案件列表的權限設計。
+- 查詢參數：`page`（預設 1，上限 10000）、`page_size`（預設 20，1～100）、`status`（選填，只接受九個簽核狀態代碼：`draft`、`pending_department_approval`、`pending_accounting_review`、`pending_accounting_approval`、`approved`、`returned_to_applicant`、`returned_to_accounting`、`rejected`、`voided`；其他值回 `422`）。
+- 排序：`submitted_at` 新到舊（NULL 排最後）、`created_at` 新到舊、`invoice_id` 由大到小，同時間的記錄順序固定。
+- 回應：`{items, total, page, page_size}`；每筆 `invoice_id`、`status`、`submission_round`、`submitted_at`、`invoice_track`、`invoice_number`、`invoice_date`、`seller_name`、`total_amount`（字串）。超出最後一頁回空 `items`，`total` 仍為本人總筆數。沒有風險分數。
+- 總筆數與資料列在同一個 REPEATABLE READ 唯讀交易內取得。
+- 已知限制：`invoices` 沒有 `submitted_by` 索引（本版不新增索引或 migration），資料量大時需評估。
+
+| 情況 | HTTP | code |
+|---|---|---|
+| `page`／`page_size`／`status` 不合法 | 422 | `VALIDATION_ERROR` |
+| 資料庫未設定 | 503 | `SERVICE_UNAVAILABLE` |
+| 查詢失敗或 Session 進入時已在交易中 | 500 | `INTERNAL_ERROR` |

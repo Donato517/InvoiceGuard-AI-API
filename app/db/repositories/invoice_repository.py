@@ -6,7 +6,7 @@
     - 以固定 SQL 存取，值一律綁定參數；只負責資料存取，不自行 commit（交易由 service 控制）。
     - 查重以字軌＋號碼＋賣方統一編號（索引 ix_invoices_number_supplier），已作廢（voided）者不計。
     - 前台查詢必須帶 user_id 條件，避免越權讀取他人發票；詳情（get_owned_*）只依 submitted_by 過濾，
-      不使用 Session 選取部門（列表尚未實作）。
+      不使用 Session 選取部門。列表同樣只依 submitted_by 過濾。
 """
 
 import json
@@ -82,6 +82,23 @@ SELECT_OWNED_INVOICE = text("""
            tax_type, sales_amount, tax_amount, total_amount, total_amount_zh, validation_results
     FROM public.invoices
     WHERE invoice_id = :invoice_id AND submitted_by = :user_id
+""")
+# 列表：總筆數與資料列用同一個條件（本人提交＋可選狀態）；排序加上 created_at、invoice_id 作為次要鍵，
+# 同一時間送出的記錄順序固定，翻頁不會重複或漏掉。submitted_at 為 NULL 者排最後。
+COUNT_OWNED_INVOICES = text("""
+    SELECT count(*) AS total
+    FROM public.invoices
+    WHERE submitted_by = :user_id
+      AND (CAST(:status AS text) IS NULL OR status = CAST(:status AS text))
+""")
+SELECT_OWNED_INVOICE_PAGE = text("""
+    SELECT invoice_id, status, submission_round, submitted_at, invoice_track, invoice_number,
+           invoice_date, seller_name, total_amount
+    FROM public.invoices
+    WHERE submitted_by = :user_id
+      AND (CAST(:status AS text) IS NULL OR status = CAST(:status AS text))
+    ORDER BY submitted_at DESC NULLS LAST, created_at DESC, invoice_id DESC
+    LIMIT :limit OFFSET :offset
 """)
 SELECT_INVOICE_ITEMS = text("""
     SELECT line_no, item_name, quantity, unit_price, line_amount
@@ -368,4 +385,16 @@ def get_current_file(db: Session, invoice_id: UUID) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
-# TODO(JerryChien): list_page(db, *, user_id, department_id, status, page, page_size) 我的發票列表
+def count_owned(db: Session, *, user_id: UUID, status: str | None) -> int:
+    """提交者本人的發票總筆數（可選狀態）；條件與 list_owned_page 相同。"""
+    return int(
+        db.execute(COUNT_OWNED_INVOICES, {"user_id": user_id, "status": status}).scalar_one()
+    )
+
+
+def list_owned_page(
+    db: Session, *, user_id: UUID, status: str | None, limit: int, offset: int
+) -> list[dict[str, Any]]:
+    """提交者本人的發票一頁（最新送出在前，順序固定）；只依 submitted_by 過濾，不使用選取部門。"""
+    params = {"user_id": user_id, "status": status, "limit": limit, "offset": offset}
+    return [dict(row) for row in db.execute(SELECT_OWNED_INVOICE_PAGE, params).mappings().all()]
