@@ -38,7 +38,7 @@ LOCATION = "global"
 TOKEN_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 # Claude 於 2026-10-30 回報 8 條併發成功；本輪不驗證雲端配額
 MAX_CONCURRENCY = 8
-# 呼叫端未傳 timeout_seconds 時的總預算；低於兩站函式上限（ADMIN 30 秒、API 60 秒）
+# 呼叫端未傳 timeout_seconds 時的總預算；低於兩站函式上限（ADMIN、API 都是 60 秒）
 DEFAULT_TIMEOUT_SECONDS = 25.0
 EMBED_TIMEOUT = httpx.Timeout(20.0, connect=10.0)
 TOKEN_TIMEOUT = httpx.Timeout(15.0, connect=10.0)

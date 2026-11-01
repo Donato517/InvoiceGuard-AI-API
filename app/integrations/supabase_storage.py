@@ -179,9 +179,9 @@ class S3StorageClient:
         """上傳（同鍵覆寫）；物件鍵由 service 產生。"""
         self._request("PUT", key, body=data, headers={"content-type": content_type})
 
-    def get(self, key: str) -> tuple[bytes, str]:
-        """下載物件內容與 Content-Type。"""
-        _, headers, body = self._request("GET", key)
+    def get(self, key: str, *, timeout_seconds: float = TIMEOUT_SECONDS) -> tuple[bytes, str]:
+        """下載物件內容與 Content-Type；timeout_seconds 是連線與每次讀取的等待上限。"""
+        _, headers, body = self._request("GET", key, timeout_seconds=timeout_seconds)
         return body, headers.get("content-type", "application/octet-stream")
 
     def list_objects(self, prefix: str) -> list[StoredObject]:
@@ -230,6 +230,7 @@ class S3StorageClient:
         query: dict[str, str] | None = None,
         body: bytes = b"",
         headers: dict[str, str] | None = None,
+        timeout_seconds: float = TIMEOUT_SECONDS,
     ) -> tuple[int, dict[str, str], bytes]:
         query = query or {}
         path = f"{self._base_path}/{_encode(self._bucket)}"
@@ -254,7 +255,7 @@ class S3StorageClient:
             url, data=body if method in {"PUT", "POST"} else None, headers=signed, method=method
         )
         try:
-            with self._opener.open(request, timeout=TIMEOUT_SECONDS) as response:
+            with self._opener.open(request, timeout=timeout_seconds) as response:
                 content = response.read(MAX_RESPONSE_BYTES)
                 return response.status, {k.lower(): v for k, v in response.headers.items()}, content
         except urllib.error.HTTPError as error:

@@ -2,16 +2,18 @@
 
 > 狀態：**草案**。放入 InvoiceGuard-AI-API 的 `docs/`，實作前須與 `docs/API_CONVENTIONS.md`、`docs/MODULE_CONTRACT.md` 對齊（路徑前綴、分頁、錯誤格式、授權）。
 > 原型使用 `/api/kb`、`/api/qa`；本專案的 API 前綴為 `/api/v1`，下列路徑請依慣例調整，並把 `companyId` 改由登入身分（JWT）取得，不信任請求自報。
-> 2026-10-30 更新：本檔早於 v1.5。資料表已在 v1.5 規劃（`rag_*`），向量模組已完成，檢索條件改為五項；與下文不同處以 [RAG 開發說明](RAG_DEVELOPMENT.md) 為準。
+> 2026-10-31 更新：ADMIN 本批依 v1.8 改為獨立檔案庫＋知識庫組合；正式 DB 已套用 v1.8，新版 ADMIN 尚未部署。檔案經 rag_knowledge_base_files 關聯、檔案數由 Trigger 維護；部門檢索與資訊部測試皆須知識庫已核准啟用且非空、文件已核准且 ready。API 問答尚未接線；下列原型原文僅供歷史參考，現行規則見 [RAG 開發說明](RAG_DEVELOPMENT.md)。
 
 ## 與現有專案的落差（動工前先決定）
 
-1. 資料表不存在：知識庫、部門配置、文件、文件部門選用、問答選用，皆需在 API 的 `app/db/models/` 設計並產生 Alembic migration（API 是唯一管理者；ADMIN 的 Model 必須與之一致）。執行 migration 需使用者授權。
+1. 結構依 v1.8 的 `rag_*` 表；檔案與知識庫改經 `rag_knowledge_base_files` 關聯，不新增 ORM Model。`rag_file_department_usage` 保留表與資料，程式不再讀寫。
 2. 公司（統編）與部門：目前 ORM 只有 `users`；ADMIN 以固定 SQL 讀取雲端的 `user_profiles`、`departments`、`user_departments`，API 尚無對應 Model。
 3. Storage Bucket 目前只允許 image/jpeg、image/png、application/pdf；DOCX、TXT、Markdown 需在 Supabase 加入對應 MIME 類型。
 4. 向量索引與模型整合尚未串接；`processingStatus` 在串接前不得回報 ready。
 
 ## 原型原文契約
+
+以下保留原型原文。文件層選用（department-usage、useDocument、document selected by department）已於 v1.7 停用，不要實作。
 
 ```text
  Set BACKEND_ENABLED=true only when implemented. Demo accounts are NOT real authentication.
@@ -51,4 +53,4 @@
 |---|---|
 | 知識庫／文件管理（工程師） | ADMIN：`app/routers/knowledge.py` → `services/` → `db/repositories/`（直接用自己的 DB 與 Storage 模組） |
 | 問答、部門問答選用（使用者） | API：`/api/v1/qa`、`/api/v1/qa/sources`；前台經 `app/clients/qa.py` 呼叫 |
-| 檢索規則 | API service：部門選用知識庫 + 部門選用文件 + 已核准 + 索引完成，四者同時成立才可被檢索 |
+| 檢索規則 | API service：部門選用知識庫 + 知識庫已核准啟用 + 文件已核准 + 索引完成，四者同時成立才可被檢索 |
