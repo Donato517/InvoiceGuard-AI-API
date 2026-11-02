@@ -203,8 +203,11 @@ def normalize_tax_id(value: str | None) -> str | None:
 
 
 def valid_tax_id(value: str) -> bool:
-    """統一編號檢查碼（各位數乘權重後，十位加個位的總和可被 5 整除；第 7 碼為 7 時另可 +1）。"""
-    if not re.fullmatch(r"\d{8}", value):
+    """統一編號檢查碼（各位數乘權重後，十位加個位的總和可被 5 整除；第 7 碼為 7 時另可 +1）。
+
+    只接受 ASCII 數字 0-9 共 8 碼；全形、阿拉伯-印度等其他 Unicode 數字不通過（`\\d` 會誤收）。
+    """
+    if not re.fullmatch(r"[0-9]{8}", value):
         return False
     total = sum(
         sum(divmod(int(digit) * weight, 10))
