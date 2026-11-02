@@ -204,9 +204,7 @@ def test_voided_case_does_not_block_a_new_case_with_a_new_invoice_id(
             ).all()
         )
     assert statuses[old_id] == "voided"
-    assert (
-        statuses[new_id] == "pending_department_approval"
-    )  # 現行首次提交狀態（W1 調整時一併更新）
+    assert statuses[new_id] == "pending_accounting_review"  # W1：首次提交狀態
 
 
 def test_old_voided_case_is_untouched_by_the_new_case(engine: Engine, world: World) -> None:
@@ -242,7 +240,7 @@ def test_new_case_has_its_own_files_history_and_round(engine: Engine, world: Wor
     assert new["invoices"][0]["submission_round"] == 1
     assert {row["invoice_id"] for row in new["invoice_status_history"]} == {new_id}
     assert [row["new_status"] for row in new["invoice_status_history"]] == [
-        "pending_department_approval"
+        "pending_accounting_review"
     ]
     # 兩案的修改紀錄與欄位複核互不共用
     assert {row["change_id"] for row in old["invoice_changes"]}.isdisjoint(

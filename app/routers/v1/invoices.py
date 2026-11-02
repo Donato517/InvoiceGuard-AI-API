@@ -97,7 +97,7 @@ def check_invoice_warnings(
 def submit_invoice(
     request: InvoiceSubmitRequest, token: BearerToken, db: OptionalDbSession
 ) -> InvoiceSubmitRead:
-    """送出核對後的發票：建立發票（待單位核准）並連結辨識時保存的影像。"""
+    """送出核對後的發票：建立發票（待會計覆核）並連結辨識時保存的影像。"""
     current = auth_service.resolve_session(db, token)
     return invoice_upload_service.submit(db, current, request)
 
