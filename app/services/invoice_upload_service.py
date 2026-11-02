@@ -12,7 +12,7 @@
     - 辨識後 1 小時內未送出即不可送出；逾時影像在之後的辨識請求順帶刪除並記 source_deleted_at（不另設排程）。
     - 模型只抄錄票面原文；日期、期別、金額、字軌號碼與統編由程式換算與檢核。檢核結果是提醒，不阻擋送出，
       送出值的檢核寫入 invoices.validation_results。
-    - 送出時狀態為 pending_department_approval（待單位核准），部門取本次 Session 的選取部門；
+    - 送出時狀態為 pending_accounting_review（待會計覆核，目前不啟用單位核准層），部門取本次 Session 的選取部門；
       已有相同字軌＋號碼＋賣方統編且未作廢的發票時拒絕送出。
     - 使用者修改過的欄位（AI 原值≠送出值，含刪除的 AI 明細）每輪寫一筆 invoice_field_reviews 供審核勾選；
       核對頁的逐次修改（含改了又改回的中間修改）依序寫入 invoice_changes。修改紀錄須從 AI 原值接續到送出值，
@@ -100,7 +100,7 @@ RECOGNITION_DEADLINE_SECONDS = 25.0
 # 20B 失敗時，剩餘時間至少這麼多才改用 120B 再試一次
 FALLBACK_MIN_SECONDS = 8.0
 CLEANUP_BATCH = 10
-SUBMITTED_STATUS = "pending_department_approval"
+SUBMITTED_STATUS = "pending_accounting_review"
 SUBMIT_REASON = "手機拍照上傳送出"
 TAX_RATE = Decimal("0.05")
 TAX_TOLERANCE = Decimal("1")
@@ -347,7 +347,7 @@ def submit(
     *,
     today: date | None = None,
 ) -> InvoiceSubmitRead:
-    """送出使用者核對後的發票：建立發票（待單位核准）、明細、影像檔、欄位複核、修改歷程與狀態歷程。
+    """送出使用者核對後的發票：建立發票（待會計覆核）、明細、影像檔、欄位複核、修改歷程與狀態歷程。
 
     Args:
         db: 資料庫 Session；未設定資料庫時為 None。

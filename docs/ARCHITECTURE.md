@@ -160,7 +160,7 @@ POST /api/v1/invoices（JSON）
   └─ services/invoice_upload_service.submit（單一交易）
        ├─ 鎖定本人辨識紀錄：1 小時內、未送出、辨識成功
        ├─ invoice_repository.lock_invoice_key（advisory lock）→ exists_duplicate（重複回 409）
-       ├─ insert invoices（pending_department_approval）／invoice_items／invoice_files（同一物件，不搬移）
+       ├─ insert invoices（pending_accounting_review）／invoice_items／invoice_files（同一物件，不搬移）
        ├─ 核對 changes（須從 AI 原值接續到送出值）與明細 source_line_no
        ├─ 與 AI 原值不同的欄位 → invoice_field_reviews（審核標示）；逐次修改 → invoice_changes
        ├─ invoice_status_history

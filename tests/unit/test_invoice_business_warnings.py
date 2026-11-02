@@ -300,7 +300,7 @@ def test_submit_with_future_date_warns_stores_and_does_not_block(
     assert response.json()["warnings"] == expected
     (invoice,) = services["records"].invoices
     assert invoice["validation_results"] == {"warnings": expected}
-    assert invoice["status"] == "pending_department_approval"
+    assert invoice["status"] == "pending_accounting_review"
 
 
 @pytest.mark.parametrize("invoice_date", ["2026-10-30", "2026-10-29", "2025-12-31"])

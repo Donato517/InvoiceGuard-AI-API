@@ -43,7 +43,7 @@ class InvoiceDetailRead(ContractModel):
     """已送出發票的詳情（提交者本人）。"""
 
     invoice_id: UUID = Field(description="發票 UUID")
-    status: str = Field(description="簽核狀態代碼，例如 pending_department_approval")
+    status: str = Field(description="簽核狀態代碼，例如 pending_accounting_review")
     submission_round: int = Field(description="提交輪次；第一次送出為 1")
     submitted_at: datetime | None = Field(description="送出時間（UTC）")
     tax_period: str | None = Field(description="發票期別 YYYYMM")

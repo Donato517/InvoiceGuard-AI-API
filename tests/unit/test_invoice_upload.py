@@ -667,7 +667,7 @@ def test_submit_creates_invoice_linked_to_recognized_image(services: dict[str, A
 
     assert response.status_code == 201
     body = response.json()
-    assert body["status"] == "pending_department_approval"
+    assert body["status"] == "pending_accounting_review"
     assert body["tax_period"] == "202608"
     assert body["warnings"] == []
     (invoice,) = records.invoices
@@ -677,7 +677,7 @@ def test_submit_creates_invoice_linked_to_recognized_image(services: dict[str, A
     assert header.tax_period == "202608"
     assert header.tax_type == "taxable"
     assert header.sales_amount == Decimal("6000")
-    assert invoice["status"] == "pending_department_approval"
+    assert invoice["status"] == "pending_accounting_review"
     assert invoice["submission_round"] == 1
     assert invoice["submitted_by"] == USER_ID
     assert invoice["department_id"] == DEPARTMENT_ID
@@ -711,7 +711,7 @@ def test_submit_creates_invoice_linked_to_recognized_image(services: dict[str, A
     assert records.history == [
         {
             "old_status": None,
-            "new_status": "pending_department_approval",
+            "new_status": "pending_accounting_review",
             "reason": "手機拍照上傳送出",
             "changed_by": USER_ID,
         }

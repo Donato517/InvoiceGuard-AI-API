@@ -216,7 +216,7 @@ class InvoiceSubmitRead(ContractModel):
     """送出結果。"""
 
     invoice_id: UUID = Field(description="發票 UUID")
-    status: str = Field(description="簽核狀態：pending_department_approval（待單位核准）")
+    status: str = Field(description="簽核狀態：pending_accounting_review（待會計覆核）")
     tax_period: str = Field(description="依發票日期換算的期別 YYYYMM")
     submitted_at: datetime = Field(description="送出時間")
     warnings: tuple[FieldWarning, ...] = Field(
