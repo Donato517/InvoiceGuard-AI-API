@@ -701,6 +701,43 @@ def test_recognize_flags_unreadable_chinese_amount(services: dict[str, Any]) -> 
     assert any(w["code"] == "total_amount_zh_unreadable" for w in warnings)
 
 
+def test_recognize_warns_about_a_line_whose_amount_differs_from_quantity_times_price(
+    services: dict[str, Any],
+) -> None:
+    # 抽樣 0057：四行中有一行 數量×單價 ≠ 金額（模型讀錯其中一個數字）
+    services["model"].replies = [
+        reply(
+            MODEL_JSON
+            | {
+                "items": [
+                    {
+                        "item_name": "杯",
+                        "quantity": "28",
+                        "unit_price": "135",
+                        "line_amount": "3780",
+                    },
+                    {
+                        "item_name": "貼紙",
+                        "quantity": "67",
+                        "unit_price": "141",
+                        "line_amount": "9547",
+                    },
+                ],
+                "sales_amount": "13327",
+                "tax_amount": "666",
+                "total_amount": "13993",
+                "total_amount_zh": None,
+            }
+        )
+    ]
+
+    warnings = recognize().json()["warnings"]
+
+    lines = [w for w in warnings if w["code"] == "item_line_amount_mismatch"]
+    assert [w["field"] for w in lines] == ["items.1.line_amount"]
+    assert "9,447" not in lines[0]["message"] and "9447" in lines[0]["message"]
+
+
 def test_recognize_cleans_up_expired_unsubmitted_images(services: dict[str, Any]) -> None:
     storage, records = services["storage"], services["records"]
     expired_key = f"{uuid4()}/INVOICES_20261028235959_{uuid4()}.jpg"
@@ -835,6 +872,7 @@ def test_submit_marks_item_changes_by_source_line(services: dict[str, Any]) -> N
     assert [(w["field"], w["code"]) for w in body["warnings"]] == [
         ("tax_amount", "tax_amount_mismatch"),
         ("total_amount", "total_amount_mismatch"),
+        ("items.1.line_amount", "item_line_amount_mismatch"),  # 2.5 × 3000 ≠ 6000
         ("items", "items_total_mismatch"),
     ]
     # AI 明細 1 移到第 2 列：只比對它自己的值（數量 2→2.5）；第 1 列為新增明細

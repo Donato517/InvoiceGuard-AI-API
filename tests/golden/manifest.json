@@ -1,0 +1,1223 @@
+{
+ "_說明": "黃金測試集清單（虛構資料，不含影像）。annotated=true 才有人工逐欄標註（對照原圖）；其餘只含檔名的字軌號碼。錯誤發票（folder=wrong）的 error_code 見分類說明與對照清單.md。日期為西元（114 年＝2025）。",
+ "invoices": [
+  {
+   "file": "invoice_0001_MT14359109.jpg",
+   "folder": "correct",
+   "data_id": "B114-041",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "MT",
+    "invoice_number": "14359109"
+   }
+  },
+  {
+   "file": "invoice_0002_HT30576433.jpg",
+   "folder": "wrong",
+   "data_id": "B114-014",
+   "class": "anomaly",
+   "error_code": "D04",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0003_MT16818127.jpg",
+   "folder": "wrong",
+   "data_id": "B114-047",
+   "class": "anomaly",
+   "error_code": "D07",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0004_TT78948381.jpg",
+   "folder": "correct",
+   "data_id": "B114-099",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "TT",
+    "invoice_number": "78948381"
+   }
+  },
+  {
+   "file": "invoice_0005_RT65733936.jpg",
+   "folder": "correct",
+   "data_id": "B114-077",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "RT",
+    "invoice_number": "65733936"
+   }
+  },
+  {
+   "file": "invoice_0006_MT09710500.jpg",
+   "folder": "correct",
+   "data_id": "B114-043",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "MT",
+    "invoice_number": "09710500"
+   }
+  },
+  {
+   "file": "invoice_0007_HT383XX246.jpg",
+   "folder": "wrong",
+   "data_id": "B114-017",
+   "class": "anomaly",
+   "error_code": "C04",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0008_RT26285287.jpg",
+   "folder": "correct",
+   "data_id": "B114-070",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "RT",
+    "invoice_number": "26285287"
+   }
+  },
+  {
+   "file": "invoice_0009_RT22453370.jpg",
+   "folder": "correct",
+   "data_id": "B114-076",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "RT",
+    "invoice_number": "22453370"
+   }
+  },
+  {
+   "file": "invoice_0010_MT26626155.jpg",
+   "folder": "wrong",
+   "data_id": "B114-033",
+   "class": "anomaly",
+   "error_code": "A05",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0011_TT27979190.jpg",
+   "folder": "correct",
+   "data_id": "B114-096",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "TT",
+    "invoice_number": "27979190"
+   }
+  },
+  {
+   "file": "invoice_0012_TT21673942.jpg",
+   "folder": "wrong",
+   "data_id": "B114-094",
+   "class": "anomaly",
+   "error_code": "E02",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0013_RT49228640.jpg",
+   "folder": "correct",
+   "data_id": "B114-068",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "RT",
+    "invoice_number": "49228640"
+   }
+  },
+  {
+   "file": "invoice_0014_KT52730245.jpg",
+   "folder": "correct",
+   "data_id": "B114-031",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "KT",
+    "invoice_number": "52730245"
+   }
+  },
+  {
+   "file": "invoice_0015_HT39586667.jpg",
+   "folder": "wrong",
+   "data_id": "B114-009",
+   "class": "anomaly",
+   "error_code": "A02",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0016_TT31778512.jpg",
+   "folder": "correct",
+   "data_id": "B114-083",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "TT",
+    "invoice_number": "31778512"
+   }
+  },
+  {
+   "file": "invoice_0017_TT93585956.jpg",
+   "folder": "correct",
+   "data_id": "B114-097",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "TT",
+    "invoice_number": "93585956"
+   }
+  },
+  {
+   "file": "invoice_0018_RT63038131.jpg",
+   "folder": "correct",
+   "data_id": "B114-075",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "RT",
+    "invoice_number": "63038131"
+   }
+  },
+  {
+   "file": "invoice_0019_PT85387779.jpg",
+   "folder": "correct",
+   "data_id": "B114-065",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "PT",
+    "invoice_number": "85387779"
+   }
+  },
+  {
+   "file": "invoice_0020_HT84981515.jpg",
+   "folder": "correct",
+   "data_id": "B114-016",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "HT",
+    "invoice_number": "84981515"
+   }
+  },
+  {
+   "file": "invoice_0021_PT05052314.jpg",
+   "folder": "correct",
+   "data_id": "B114-059",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "PT",
+    "invoice_number": "05052314"
+   }
+  },
+  {
+   "file": "invoice_0022_HT51042604.jpg",
+   "folder": "correct",
+   "data_id": "B114-001",
+   "class": "duplicate_reference",
+   "error_code": "C05",
+   "annotated": false,
+   "expected": {
+    "invoice_track": "HT",
+    "invoice_number": "51042604"
+   }
+  },
+  {
+   "file": "invoice_0023_MT03113081.jpg",
+   "folder": "correct",
+   "data_id": "B114-032",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "MT",
+    "invoice_number": "03113081"
+   }
+  },
+  {
+   "file": "invoice_0024_PT71535289.jpg",
+   "folder": "wrong",
+   "data_id": "B114-055",
+   "class": "anomaly",
+   "error_code": "A03",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0025_TT70481698.jpg",
+   "folder": "correct",
+   "data_id": "B114-088",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "TT",
+    "invoice_number": "70481698"
+   }
+  },
+  {
+   "file": "invoice_0026_TT78181906.jpg",
+   "folder": "correct",
+   "data_id": "B114-092",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "TT",
+    "invoice_number": "78181906"
+   }
+  },
+  {
+   "file": "invoice_0027_KT40288659.jpg",
+   "folder": "correct",
+   "data_id": "B114-018",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "KT",
+    "invoice_number": "40288659"
+   }
+  },
+  {
+   "file": "invoice_0028_KT80302402.jpg",
+   "folder": "correct",
+   "data_id": "B114-020",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "KT",
+    "invoice_number": "80302402"
+   }
+  },
+  {
+   "file": "invoice_0029_PT16335560.jpg",
+   "folder": "wrong",
+   "data_id": "B114-061",
+   "class": "anomaly",
+   "error_code": "D05",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0030_PT27216799.jpg",
+   "folder": "correct",
+   "data_id": "B114-062",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "PT",
+    "invoice_number": "27216799"
+   }
+  },
+  {
+   "file": "invoice_0031_MT53630642.jpg",
+   "folder": "wrong",
+   "data_id": "B114-046",
+   "class": "anomaly",
+   "error_code": "A04",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0032_KT25404348.jpg",
+   "folder": "correct",
+   "data_id": "B114-026",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "KT",
+    "invoice_number": "25404348"
+   }
+  },
+  {
+   "file": "invoice_0033_HT72013002.jpg",
+   "folder": "wrong",
+   "data_id": "B114-012",
+   "class": "anomaly",
+   "error_code": "D08",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0034_KT99933029.jpg",
+   "folder": "correct",
+   "data_id": "B114-029",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "KT",
+    "invoice_number": "99933029"
+   }
+  },
+  {
+   "file": "invoice_0035_KT40479953.jpg",
+   "folder": "correct",
+   "data_id": "B114-030",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "KT",
+    "invoice_number": "40479953"
+   }
+  },
+  {
+   "file": "invoice_0036_HT25396232.jpg",
+   "folder": "correct",
+   "data_id": "B114-003",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "HT",
+    "invoice_number": "25396232"
+   }
+  },
+  {
+   "file": "invoice_0037_HT10502834.jpg",
+   "folder": "wrong",
+   "data_id": "B114-008",
+   "class": "anomaly",
+   "error_code": "E04",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0038_HT25779386.jpg",
+   "folder": "wrong",
+   "data_id": "B114-007",
+   "class": "anomaly",
+   "error_code": "C01",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0039_HT25371759.jpg",
+   "folder": "wrong",
+   "data_id": "B114-004",
+   "class": "context_only",
+   "error_code": "E03",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0040_MT34310767.jpg",
+   "folder": "correct",
+   "data_id": "B114-039",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "MT",
+    "invoice_number": "34310767"
+   }
+  },
+  {
+   "file": "invoice_0041_TT89272272.jpg",
+   "folder": "correct",
+   "data_id": "B114-087",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "TT",
+    "invoice_number": "89272272"
+   }
+  },
+  {
+   "file": "invoice_0042_TT92765345.jpg",
+   "folder": "correct",
+   "data_id": "B114-082",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "TT",
+    "invoice_number": "92765345"
+   }
+  },
+  {
+   "file": "invoice_0043_KT02402803.jpg",
+   "folder": "correct",
+   "data_id": "B114-022",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "KT",
+    "invoice_number": "02402803"
+   }
+  },
+  {
+   "file": "invoice_0044_PT34041389.jpg",
+   "folder": "correct",
+   "data_id": "B114-051",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "PT",
+    "invoice_number": "34041389"
+   }
+  },
+  {
+   "file": "invoice_0045_PT13412676.jpg",
+   "folder": "correct",
+   "data_id": "B114-052",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "PT",
+    "invoice_number": "13412676"
+   }
+  },
+  {
+   "file": "invoice_0046_PT62343559.jpg",
+   "folder": "wrong",
+   "data_id": "B114-064",
+   "class": "anomaly",
+   "error_code": "B01",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0047_KT48796619.jpg",
+   "folder": "correct",
+   "data_id": "B114-025",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "KT",
+    "invoice_number": "48796619"
+   }
+  },
+  {
+   "file": "invoice_0048_HT80587955.jpg",
+   "folder": "wrong",
+   "data_id": "B114-005",
+   "class": "anomaly",
+   "error_code": "A04",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0049_MT42064210.jpg",
+   "folder": "wrong",
+   "data_id": "B114-044",
+   "class": "anomaly",
+   "error_code": "D06",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0050_MT36060388.jpg",
+   "folder": "correct",
+   "data_id": "B114-037",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "MT",
+    "invoice_number": "36060388"
+   }
+  },
+  {
+   "file": "invoice_0051_PT37396067.jpg",
+   "folder": "correct",
+   "data_id": "B114-058",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "PT",
+    "invoice_number": "37396067"
+   }
+  },
+  {
+   "file": "invoice_0052_TT91984547.jpg",
+   "folder": "correct",
+   "data_id": "B114-084",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "TT",
+    "invoice_number": "91984547"
+   }
+  },
+  {
+   "file": "invoice_0053_TT73240707.jpg",
+   "folder": "correct",
+   "data_id": "B114-093",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "TT",
+    "invoice_number": "73240707"
+   }
+  },
+  {
+   "file": "invoice_0054_TT65536483.jpg",
+   "folder": "correct",
+   "data_id": "B114-089",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "TT",
+    "invoice_number": "65536483"
+   }
+  },
+  {
+   "file": "invoice_0055_HT51042604.jpg",
+   "folder": "wrong",
+   "data_id": "B114-001",
+   "class": "anomaly",
+   "error_code": "C05",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0056_MT91223538.jpg",
+   "folder": "correct",
+   "data_id": "B114-034",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "MT",
+    "invoice_number": "91223538"
+   }
+  },
+  {
+   "file": "invoice_0057_MT07940088.jpg",
+   "folder": "correct",
+   "data_id": "B114-042",
+   "class": "normal",
+   "error_code": null,
+   "annotated": true,
+   "expected": {
+    "buyer_name": "福懋文創股份有限公司",
+    "buyer_tax_id": "22644358",
+    "tax_type": "taxable",
+    "invoice_track": "MT",
+    "invoice_number": "07940088",
+    "invoice_date": "2025-06-02",
+    "seller_name": "杯中山陶瓷有限公司",
+    "seller_tax_id": "22819672",
+    "sales_amount": "21195",
+    "tax_amount": "1060",
+    "total_amount": "22255",
+    "total_amount_zh": "22255",
+    "items": [
+     {
+      "item_name": "臺灣山景陶瓷馬克杯(個)",
+      "quantity": "28",
+      "unit_price": "135",
+      "line_amount": "3780"
+     },
+     {
+      "item_name": "陶瓷轉印貼紙A3(張)",
+      "quantity": "67",
+      "unit_price": "141",
+      "line_amount": "9447"
+     },
+     {
+      "item_name": "陶瓷素坯小花器(個)",
+      "quantity": "41",
+      "unit_price": "90",
+      "line_amount": "3690"
+     },
+     {
+      "item_name": "玻璃隨行杯500ml(個)",
+      "quantity": "23",
+      "unit_price": "186",
+      "line_amount": "4278"
+     }
+    ]
+   }
+  },
+  {
+   "file": "invoice_0058_RT39946190.jpg",
+   "folder": "correct",
+   "data_id": "B114-079",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "RT",
+    "invoice_number": "39946190"
+   }
+  },
+  {
+   "file": "invoice_0059_KT21927663.jpg",
+   "folder": "wrong",
+   "data_id": "B114-023",
+   "class": "anomaly",
+   "error_code": "B03",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0060_KT18288035.jpg",
+   "folder": "correct",
+   "data_id": "B114-021",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "KT",
+    "invoice_number": "18288035"
+   }
+  },
+  {
+   "file": "invoice_0061_HT98486630.jpg",
+   "folder": "correct",
+   "data_id": "B114-015",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "HT",
+    "invoice_number": "98486630"
+   }
+  },
+  {
+   "file": "invoice_0062_RT64872957.jpg",
+   "folder": "correct",
+   "data_id": "B114-067",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "RT",
+    "invoice_number": "64872957"
+   }
+  },
+  {
+   "file": "invoice_0063_PT85455226.jpg",
+   "folder": "wrong",
+   "data_id": "B114-054",
+   "class": "anomaly",
+   "error_code": "D03",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0064_HT50368417.jpg",
+   "folder": "wrong",
+   "data_id": "B114-011",
+   "class": "anomaly",
+   "error_code": "C02",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0065_MT90349597.jpg",
+   "folder": "correct",
+   "data_id": "B114-049",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "MT",
+    "invoice_number": "90349597"
+   }
+  },
+  {
+   "file": "invoice_0066_HT67471416.jpg",
+   "folder": "correct",
+   "data_id": "B114-002",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "HT",
+    "invoice_number": "67471416"
+   }
+  },
+  {
+   "file": "invoice_0067_PT96076035.jpg",
+   "folder": "wrong",
+   "data_id": "B114-060",
+   "class": "anomaly",
+   "error_code": "B02",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0068_TT68708128.jpg",
+   "folder": "correct",
+   "data_id": "B114-100",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "TT",
+    "invoice_number": "68708128"
+   }
+  },
+  {
+   "file": "invoice_0069_MT00159045.jpg",
+   "folder": "correct",
+   "data_id": "B114-048",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "MT",
+    "invoice_number": "00159045"
+   }
+  },
+  {
+   "file": "invoice_0070_MT39059150.jpg",
+   "folder": "correct",
+   "data_id": "B114-036",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "MT",
+    "invoice_number": "39059150"
+   }
+  },
+  {
+   "file": "invoice_0071_RT13019317.jpg",
+   "folder": "wrong",
+   "data_id": "B114-071",
+   "class": "anomaly",
+   "error_code": "A06",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0072_KT71610217.jpg",
+   "folder": "correct",
+   "data_id": "B114-024",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "KT",
+    "invoice_number": "71610217"
+   }
+  },
+  {
+   "file": "invoice_0073_RT90413888.jpg",
+   "folder": "correct",
+   "data_id": "B114-074",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "RT",
+    "invoice_number": "90413888"
+   }
+  },
+  {
+   "file": "invoice_0074_MT55841699.jpg",
+   "folder": "wrong",
+   "data_id": "B114-038",
+   "class": "anomaly",
+   "error_code": "B04",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0075_TT79638449.jpg",
+   "folder": "correct",
+   "data_id": "B114-081",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "TT",
+    "invoice_number": "79638449"
+   }
+  },
+  {
+   "file": "invoice_0076_PT60559005.jpg",
+   "folder": "correct",
+   "data_id": "B114-053",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "PT",
+    "invoice_number": "60559005"
+   }
+  },
+  {
+   "file": "invoice_0077_HT51684138.jpg",
+   "folder": "correct",
+   "data_id": "B114-010",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "HT",
+    "invoice_number": "51684138"
+   }
+  },
+  {
+   "file": "invoice_0078_TT33824432.jpg",
+   "folder": "correct",
+   "data_id": "B114-085",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "TT",
+    "invoice_number": "33824432"
+   }
+  },
+  {
+   "file": "invoice_0079_RT97565752.jpg",
+   "folder": "correct",
+   "data_id": "B114-080",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "RT",
+    "invoice_number": "97565752"
+   }
+  },
+  {
+   "file": "invoice_0080_TT78444348.jpg",
+   "folder": "wrong",
+   "data_id": "B114-086",
+   "class": "anomaly",
+   "error_code": "A07",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0081_HT58699696.jpg",
+   "folder": "wrong",
+   "data_id": "B114-091",
+   "class": "anomaly",
+   "error_code": "C03",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0082_TT49708469.jpg",
+   "folder": "correct",
+   "data_id": "B114-098",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "TT",
+    "invoice_number": "49708469"
+   }
+  },
+  {
+   "file": "invoice_0083_PT43419911.jpg",
+   "folder": "correct",
+   "data_id": "B114-063",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "PT",
+    "invoice_number": "43419911"
+   }
+  },
+  {
+   "file": "invoice_0084_HT58349005.jpg",
+   "folder": "correct",
+   "data_id": "B114-006",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "HT",
+    "invoice_number": "58349005"
+   }
+  },
+  {
+   "file": "invoice_0085_MT49923145.jpg",
+   "folder": "correct",
+   "data_id": "B114-050",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "MT",
+    "invoice_number": "49923145"
+   }
+  },
+  {
+   "file": "invoice_0086_RT60012428.jpg",
+   "folder": "wrong",
+   "data_id": "B114-073",
+   "class": "anomaly",
+   "error_code": "B05",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0087_KT16086461.jpg",
+   "folder": "correct",
+   "data_id": "B114-028",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "KT",
+    "invoice_number": "16086461"
+   }
+  },
+  {
+   "file": "invoice_0088_TT60685375.jpg",
+   "folder": "correct",
+   "data_id": "B114-095",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "TT",
+    "invoice_number": "60685375"
+   }
+  },
+  {
+   "file": "invoice_0089_RT10313254.jpg",
+   "folder": "correct",
+   "data_id": "B114-069",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "RT",
+    "invoice_number": "10313254"
+   }
+  },
+  {
+   "file": "invoice_0090_PT55967298.jpg",
+   "folder": "correct",
+   "data_id": "B114-066",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "PT",
+    "invoice_number": "55967298"
+   }
+  },
+  {
+   "file": "invoice_0091_KT81757367.jpg",
+   "folder": "correct",
+   "data_id": "B114-027",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "KT",
+    "invoice_number": "81757367"
+   }
+  },
+  {
+   "file": "invoice_0092_HT39906807.jpg",
+   "folder": "wrong",
+   "data_id": "B114-013",
+   "class": "anomaly",
+   "error_code": "E01",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0093_PT51020473.jpg",
+   "folder": "correct",
+   "data_id": "B114-057",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "PT",
+    "invoice_number": "51020473"
+   }
+  },
+  {
+   "file": "invoice_0094_PT22646575.jpg",
+   "folder": "correct",
+   "data_id": "B114-056",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "PT",
+    "invoice_number": "22646575"
+   }
+  },
+  {
+   "file": "invoice_0095_TT07384219.jpg",
+   "folder": "wrong",
+   "data_id": "B114-090",
+   "class": "anomaly",
+   "error_code": "A01",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0096_RT30630655.jpg",
+   "folder": "correct",
+   "data_id": "B114-072",
+   "class": "normal",
+   "error_code": null,
+   "annotated": true,
+   "expected": {
+    "buyer_name": "福懋文創股份有限公司",
+    "buyer_tax_id": "22644358",
+    "tax_type": "taxable",
+    "invoice_track": "RT",
+    "invoice_number": "30630655",
+    "invoice_date": "2025-09-25",
+    "seller_name": "曜格電腦有限公司",
+    "seller_tax_id": "24687607",
+    "sales_amount": "18168",
+    "tax_amount": "908",
+    "total_amount": "19076",
+    "total_amount_zh": "19076",
+    "items": [
+     {
+      "item_name": "USB隨身碟64GB(個)",
+      "quantity": "15",
+      "unit_price": "179",
+      "line_amount": "2685"
+     },
+     {
+      "item_name": "噴墨印表機黑色墨水(瓶)",
+      "quantity": "8",
+      "unit_price": "276",
+      "line_amount": "2208"
+     },
+     {
+      "item_name": "USB-C充電線1m(條)",
+      "quantity": "11",
+      "unit_price": "135",
+      "line_amount": "1485"
+     },
+     {
+      "item_name": "無線滑鼠(個)",
+      "quantity": "16",
+      "unit_price": "265",
+      "line_amount": "4240"
+     },
+     {
+      "item_name": "USB-C擴充集線器(個)",
+      "quantity": "10",
+      "unit_price": "755",
+      "line_amount": "7550"
+     }
+    ]
+   }
+  },
+  {
+   "file": "invoice_0097_KT99809451.jpg",
+   "folder": "correct",
+   "data_id": "B114-019",
+   "class": "normal",
+   "error_code": null,
+   "annotated": false,
+   "expected": {
+    "invoice_track": "KT",
+    "invoice_number": "99809451"
+   }
+  },
+  {
+   "file": "invoice_0098_MT98268785.jpg",
+   "folder": "wrong",
+   "data_id": "B114-040",
+   "class": "anomaly",
+   "error_code": "D02",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0099_MT25828865.jpg",
+   "folder": "wrong",
+   "data_id": "B114-035",
+   "class": "anomaly",
+   "error_code": "D01",
+   "annotated": false,
+   "expected": {}
+  },
+  {
+   "file": "invoice_0100_RT39560800.jpg",
+   "folder": "correct",
+   "data_id": "B114-078",
+   "class": "normal",
+   "error_code": null,
+   "annotated": true,
+   "expected": {
+    "buyer_name": "福懋文創股份有限公司",
+    "buyer_tax_id": "22644358",
+    "tax_type": "taxable",
+    "invoice_track": "RT",
+    "invoice_number": "39560800",
+    "invoice_date": "2025-10-03",
+    "seller_name": "拾頁文具有限公司",
+    "seller_tax_id": "43149447",
+    "sales_amount": "14150",
+    "tax_amount": "708",
+    "total_amount": "14858",
+    "total_amount_zh": "14858",
+    "items": [
+     {
+      "item_name": "教師節手寫感謝卡(張)",
+      "quantity": "203",
+      "unit_price": "14",
+      "line_amount": "2842"
+     },
+     {
+      "item_name": "校園社團招新傳單A5(張)",
+      "quantity": "557",
+      "unit_price": "4",
+      "line_amount": "2228"
+     },
+     {
+      "item_name": "中秋月兔祝福卡(張)",
+      "quantity": "454",
+      "unit_price": "20",
+      "line_amount": "9080"
+     }
+    ]
+   }
+  }
+ ]
+}
