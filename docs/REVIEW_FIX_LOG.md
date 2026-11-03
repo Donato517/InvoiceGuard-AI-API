@@ -490,3 +490,13 @@
 - 開發中發現：列表服務若在 `SET TRANSACTION` 本身失敗時不 rollback，會留下進行中的交易；已比照詳情服務處理並加測試。
 - 驗證：pytest 1154 passed、14 skipped；ruff check／format 通過；隔離 PostgreSQL 15（Schema v1.8 去除 pgvector）以 TestClient＋真實 Session 驗證：他人與無提交者草稿不出現、總筆數一致、相同時間戳翻頁無重複遺漏、NULL 排最後、九個狀態篩選、非法狀態 422、無資料與他人視角；結束後無 idle in transaction。未驗：正式 DB、真實登入 Session、部署環境、效能（無 submitted_by 索引）。
 - 補充驗證（2026-11-02）：另以隔離 PostgreSQL 15（Schema v1.8 去除 pgvector、自簽 TLS）＋本機 API 程序（真實 auth_service 登入）＋本機前台程序經真實 HTTP 驗證：25 筆分頁 20＋5、approved 篩選 5 筆、他人只見自己的、無／無效 Token 回 401、非法 status 與 page_size=101 回 422、無 idle in transaction。仍非正式環境驗證。
+
+## 2026-11-03 Claude：日期年份推算與國字大寫一致檢核
+
+- 問題 1：票面「中華民國114年　10月　3日」年份與月日相隔很遠，模型只抄到「10月3」，`parse_printed_date` 回空。處理：prompt 要求連年份抄錄；新增 `utils/invoice_format.infer_date_from_period`（月份屬於票面期別時以期別年份補上並附提醒 `invoice_date_year_inferred`，不符不猜測）。
+- 問題 2：國字大寫與總計沒有一致檢核。處理：新增 `chinese_amount_to_int` 與 `_consistency_warnings` 的 `total_amount_zh_mismatch`／`total_amount_zh_unreadable`（辨識、`/check-warnings`、`POST /invoices` 共用，只提醒）。
+- 實測回饋：正式 Document AI 抽樣 10 張（`新增100張發票…/正確發票資料夾` 每 7 張取 1，排除 C05 重複件）。第一版把開頭的「拾」當 10，10 張中 5 張誤報；因大寫欄預印位名、劃掉的「拾」會被模型抄進開頭，改為沒有數字的位名一律視為空位，並補簡體「贰」「陆」。改後 10 張中只剩 1 張真正的漏抄（0068）被標示。這規則是依這 10 張樣本調整，有過擬合風險，需黃金集驗證。
+- 處理檔案：app/utils/invoice_format.py、app/services/invoice_upload_service.py、app/services/invoice_warning_service.py、tests/unit/test_invoice_upload.py、tests/unit/test_invoice_business_warnings.py、docs/DEVELOPMENT_STATUS.md。
+- 驗證：pytest 1225 passed、14 skipped；ruff、`check_project` 通過。未驗：黃金測試集（prompt 變更尚未重跑）、雲端部署。
+- 已知缺口（抽樣發現，未處理）：明細「數量×單價＝金額」沒有逐行檢核（樣本 0057 有一行不符但無提醒）；OCR＋模型單張耗時約 20～24 秒，接近 25 秒總預算。
+- 前台待確認：`invoice-field-rules.js` 的 `BUSINESS_WARNING_CODES` 只保留已知代碼，新警示碼不會顯示在前台的預覽。

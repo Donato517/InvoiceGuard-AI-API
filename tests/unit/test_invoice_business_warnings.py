@@ -21,7 +21,8 @@ from app.services import auth_service, invoice_upload_service, invoice_warning_s
 from app.services.invoice_upload_service import future_date_warnings, today_taipei
 from app.services.invoice_warning_service import preview_warnings
 from tests.unit import test_invoice_upload as upload_tests
-from tests.unit.test_invoice_required_check import session_read, valid_body
+from tests.unit.test_invoice_required_check import session_read
+from tests.unit.test_invoice_required_check import valid_body as _valid_body
 
 client = TestClient(app)
 # 借用辨識／送出的替身 fixture（pytest 以名稱在本模組找 fixture）
@@ -33,6 +34,13 @@ AUTH = {"Authorization": "Bearer synthetic-session-token"}
 PREVIEW = "/api/v1/invoices/check-warnings"
 TODAY = date(2026, 10, 30)
 FUTURE_MESSAGE = "發票日期晚於今天，請核對原始發票。"
+
+
+def valid_body(**changes: Any) -> dict[str, Any]:
+    """合法請求；改動總計時預設不帶國字大寫（該欄位另有專屬檢核測試，避免干擾各情境只驗單一警示）。"""
+    if "total_amount" in changes:
+        changes.setdefault("total_amount_zh", None)
+    return _valid_body(**changes)
 
 
 def codes(result: Any) -> list[str]:
@@ -286,7 +294,12 @@ def submit_with(services: dict[str, Any], monkeypatch: pytest.MonkeyPatch, **cha
     monkeypatch.setattr(invoice_upload_service, "today_taipei", lambda now=None: TODAY)
     recognition_id = recognize().json()["recognition_id"]
     return client.post(
-        "/api/v1/invoices", json=submit_payload(recognition_id, **changes), headers=AUTH
+        "/api/v1/invoices",
+        json=submit_payload(
+            recognition_id,
+            **({"total_amount_zh": None} if "total_amount" in changes else {}) | changes,
+        ),
+        headers=AUTH,
     )
 
 
@@ -340,7 +353,9 @@ def test_submit_and_preview_return_identical_warnings(
 
     assert preview.status_code == 200 and submitted.status_code == 201
     assert preview.json()["warnings"] == submitted.json()["warnings"]
-    assert len(preview.json()["warnings"]) == 3
+    # 日期、稅額、總計與國字大寫（payload 仍帶 6300 的國字大寫）四項，預覽與正式送出一致
+    assert len(preview.json()["warnings"]) == 4
+    assert "total_amount_zh_mismatch" in [w["code"] for w in preview.json()["warnings"]]
 
 
 def test_submit_still_rejects_bad_date_and_missing_date_with_422(
@@ -353,3 +368,28 @@ def test_submit_still_rejects_bad_date_and_missing_date_with_422(
         payload = submit_payload(recognition_id, invoice_date=bad)
         assert client.post("/api/v1/invoices", json=payload, headers=AUTH).status_code == 422, bad
     assert services["records"].invoices == []
+
+
+def test_preview_warns_when_chinese_amount_differs_from_total() -> None:
+    result = preview_warnings(valid_body(total_amount_zh="壹萬元整"), TODAY)
+
+    assert [(w.field, w.code) for w in result.warnings] == [
+        ("total_amount_zh", "total_amount_zh_mismatch")
+    ]
+
+
+def test_preview_accepts_matching_chinese_amount_and_skips_unknown_total() -> None:
+    assert preview_warnings(valid_body(), TODAY).warnings == ()  # 6300 ↔ 陸仟參佰元整
+    assert (
+        preview_warnings(valid_body(total_amount="", total_amount_zh="壹萬元整"), TODAY).warnings
+        == ()
+    )
+
+
+def test_submit_chinese_amount_mismatch_is_saved_and_still_accepted(
+    services: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    response = submit_with(services, monkeypatch, total_amount_zh="壹萬元整")
+
+    assert response.status_code == 201
+    assert [w["code"] for w in response.json()["warnings"]] == ["total_amount_zh_mismatch"]
