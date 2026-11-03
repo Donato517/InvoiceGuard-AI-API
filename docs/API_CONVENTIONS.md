@@ -139,6 +139,18 @@ Python `DeleteResult` 是內部服務結果，未來 HTTP DELETE 仍依本文件
 | `INVOICE_ITEMS_INVALID` | 400 | 明細的 source_line_no 重複或不是這次辨識的 AI 明細 |
 | `INVOICE_CHANGES_INVALID` | 400 | 修改紀錄的欄位不存在，或無法從 AI 原值接續到送出值 |
 | `INVOICE_DATA_INVALID` | 500 | 已保存的發票 `validation_results` 結構不符（GET /invoices/{id}）；訊息不含資料內容 |
+| `INVOICE_NOT_RETURNED` | 409 | 案件目前不是 returned_to_applicant（GET return-items／POST resubmit；作廢案件也回此碼） |
+| `RESUBMIT_ROUND_STALE` | 409 | `expected_round` 與案件目前輪次不符（已有較新輪次） |
+| `RESUBMIT_IMAGE_REQUIRES_VOID` | 409 | 有圖片問題：不可同案重送或申覆，須由原提交者作廢後重新上傳 |
+| `RESUBMIT_ORIGIN_UNKNOWN` | 409 | 無法由退回歷程確認退件來源的審核節點 |
+| `RETURN_ITEMS_MISSING` | 409 | 案件沒有待處理的退件項目 |
+| `RETURN_ITEM_INVALID` | 409 | 退件項目的欄位或授權欄位定位無效 |
+| `RETURN_ITEM_NOT_OPEN` | 409 | 退件項目已被處理 |
+| `IDEMPOTENCY_KEY_REUSED` | 409 | 相同冪等鍵已用於不同內容的請求 |
+| `RESUBMIT_FIELD_NOT_ALLOWED` | 400 | 修改了財務未授權的欄位（含編輯事件）；`details` 列出欄位 |
+| `RESUBMIT_ITEMS_STRUCTURE_CHANGED` | 400 | 明細新增、刪除或重排（item_id 與上一輪不一致） |
+| `RESUBMIT_EVENTS_INVALID` | 400 | 編輯事件鏈無法從上一輪提交值接續到本輪送出值 |
+| `RESUBMIT_RESPONSES_INCOMPLETE` | 400 | 欄位退件項目未回覆、申覆缺說明、聲稱補正但未修改 |
 
 Storage、Document AI、Groq 未設定或用量已滿時回通用 `SERVICE_UNAVAILABLE`（503）。
 
@@ -163,7 +175,7 @@ Storage、Document AI、Groq 未設定或用量已滿時回通用 `SERVICE_UNAVA
 - 驗證：沿用 Session（第 7 節）；未帶或無效的 Token 回 `401`。
 - 授權：只有有效登入的**提交者本人**（`invoices.submitted_by` = 登入者）可讀取，條件在 repository 查詢中落實。Session 目前選取的部門**不是**讀取過濾條件，本人換部門後仍可讀自己過去提交的發票；同部門其他使用者不能讀。尚無主管、代理人或財會的跨使用者讀取。
 - 回應：發票表頭、`items`（依 `line_no`）、`modified_fields`（沿用 POST 的 `ModifiedField`）、`warnings`（沿用 `FieldWarning`）、`file`（`mime_type`、`original_filename`、`size_bytes`、`version_no`；沒有目前影像時為 `null`）。金額與數量為保留資料庫小數位數的字串，NULL 回 `null`。`modified_fields` 內的值是送出時的標準值（數字去尾端 0），格式與金額欄位不同，不可用字串直接比較；沒有修改紀錄的欄位不代表已取得完整 AI 原值，本版不回傳 AI 原始快照。
-- 不回傳私有 Storage Key（`storage_path`、`bucket_name`）。目前**沒有**圖片實體讀取、修改（PATCH／PUT／DELETE）或退回重送端點。
+- 不回傳私有 Storage Key（`storage_path`、`bucket_name`）。目前**沒有**圖片實體讀取、PATCH／PUT／DELETE；退回重送見 `docs/RESUBMIT_API_CONTRACT.md`（GET `/invoices/{id}/return-items`、POST `/invoices/{id}/resubmit`）。
 - 錯誤：
 
 | 情況 | HTTP | code |

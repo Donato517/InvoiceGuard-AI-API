@@ -12,12 +12,19 @@
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Body, File, UploadFile, status
+from fastapi import APIRouter, Body, File, Response, UploadFile, status
 
 from app.core.deps import BearerToken, OptionalDbSession
 from app.schemas.common import PageNumber, PageSize
 from app.schemas.invoice_detail import InvoiceDetailRead
 from app.schemas.invoice_list import ApprovalStatus, InvoiceListRead
+from app.schemas.invoice_resubmit import (
+    InvoiceResubmitRead,
+    InvoiceResubmitRequest,
+    InvoiceVoidRead,
+    InvoiceVoidRequest,
+    ReturnItemsRead,
+)
 from app.schemas.invoice_upload import (
     DuplicateCheckRead,
     DuplicateCheckRequest,
@@ -32,7 +39,9 @@ from app.services import (
     invoice_detail_service,
     invoice_list_service,
     invoice_required_service,
+    invoice_resubmit_service,
     invoice_upload_service,
+    invoice_void_service,
     invoice_warning_service,
 )
 
@@ -122,3 +131,39 @@ def get_invoice(invoice_id: UUID, token: BearerToken, db: OptionalDbSession) -> 
     """發票詳情：提交者本人讀取已送出的表頭、明細、修改對照、檢核警示與目前影像中繼資料（唯讀）。"""
     current = auth_service.resolve_session(db, token)
     return invoice_detail_service.get_invoice_detail(db, current, invoice_id)
+
+
+@router.get("/{invoice_id}/return-items", response_model=ReturnItemsRead)
+def get_return_items(
+    invoice_id: UUID, token: BearerToken, db: OptionalDbSession
+) -> ReturnItemsRead:
+    """退件項目：原提交者讀取財務退回的結構化項目、可修改的欄位與上一輪正式提交的資料（不重新辨識）。"""
+    current = auth_service.resolve_session(db, token)
+    return invoice_resubmit_service.get_return_items(db, current, invoice_id)
+
+
+@router.post("/{invoice_id}/resubmit", response_model=InvoiceResubmitRead)
+def resubmit_invoice(
+    invoice_id: UUID,
+    request: InvoiceResubmitRequest,
+    response: Response,
+    token: BearerToken,
+    db: OptionalDbSession,
+) -> InvoiceResubmitRead:
+    """同案重送：原提交者補正財務授權的欄位或附說明申覆，保存新輪次並回到退件來源的審核節點。
+
+    首次成功回 201；相同 idempotency_key 與內容的重試回 200 與首次的原結果（replayed=true）。
+    """
+    current = auth_service.resolve_session(db, token)
+    result = invoice_resubmit_service.resubmit(db, current, invoice_id, request)
+    response.status_code = status.HTTP_200_OK if result.replayed else status.HTTP_201_CREATED
+    return result
+
+
+@router.post("/{invoice_id}/void", response_model=InvoiceVoidRead)
+def void_invoice(
+    invoice_id: UUID, request: InvoiceVoidRequest, token: BearerToken, db: OptionalDbSession
+) -> InvoiceVoidRead:
+    """申請人作廢被退回的案件（僅原提交者）：只轉換狀態為 voided 並寫歷程，保留案件、影像與退件歷史；之後重新上傳會建立新案件。"""
+    current = auth_service.resolve_session(db, token)
+    return invoice_void_service.void_returned(db, current, invoice_id, request)

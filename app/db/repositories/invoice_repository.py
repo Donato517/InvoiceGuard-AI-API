@@ -28,6 +28,8 @@ EXISTS_DUPLICATE = text("""
           AND invoice_number = :invoice_number
           AND seller_tax_id = :seller_tax_id
           AND status <> 'voided'
+          AND (CAST(:exclude_invoice_id AS uuid) IS NULL
+               OR invoice_id <> CAST(:exclude_invoice_id AS uuid))
     )
 """)
 INSERT_INVOICE = text("""
@@ -182,13 +184,19 @@ def lock_invoice_key(
 
 
 def exists_duplicate(
-    db: Session, *, invoice_track: str, invoice_number: str, seller_tax_id: str
+    db: Session,
+    *,
+    invoice_track: str,
+    invoice_number: str,
+    seller_tax_id: str,
+    exclude_invoice_id: UUID | None = None,
 ) -> bool:
-    """系統內是否已有相同字軌、號碼與賣方統編且未作廢的發票。"""
+    """系統內是否已有相同字軌、號碼與賣方統編且未作廢的發票；同案重送以 exclude_invoice_id 排除本案。"""
     params = {
         "invoice_track": invoice_track,
         "invoice_number": invoice_number,
         "seller_tax_id": seller_tax_id,
+        "exclude_invoice_id": exclude_invoice_id,
     }
     return bool(db.execute(EXISTS_DUPLICATE, params).scalar_one())
 
