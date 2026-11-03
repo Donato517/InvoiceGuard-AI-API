@@ -75,9 +75,18 @@ def preview_warnings(body: Mapping[str, Any], today: date | None = None) -> Warn
     """
     today = today or today_taipei()
     items = body.get("items")
-    line_amounts = [
-        _parse_amount(item.get("line_amount")) if isinstance(item, Mapping) else None
+    item_rows = [
+        item if isinstance(item, Mapping) else {}
         for item in (items if isinstance(items, list) else [])
+    ]
+    line_amounts = [_parse_amount(item.get("line_amount")) for item in item_rows]
+    item_details = [
+        (
+            _parse_amount(item.get("quantity")),
+            _parse_amount(item.get("unit_price")),
+            _parse_amount(item.get("line_amount")),
+        )
+        for item in item_rows
     ]
     seller = body.get("seller_tax_id")
     warnings = [
@@ -93,6 +102,7 @@ def preview_warnings(body: Mapping[str, Any], today: date | None = None) -> Warn
             total_zh=body.get("total_amount_zh")
             if isinstance(body.get("total_amount_zh"), str)
             else None,
+            item_details=item_details,
         ),
     ]
     return WarningCheckRead(warnings=tuple(warnings), checked_on=today)

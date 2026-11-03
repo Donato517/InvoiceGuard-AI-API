@@ -500,3 +500,10 @@
 - 驗證：pytest 1225 passed、14 skipped；ruff、`check_project` 通過。未驗：黃金測試集（prompt 變更尚未重跑）、雲端部署。
 - 已知缺口（抽樣發現，未處理）：明細「數量×單價＝金額」沒有逐行檢核（樣本 0057 有一行不符但無提醒）；OCR＋模型單張耗時約 20～24 秒，接近 25 秒總預算。
 - 前台待確認：`invoice-field-rules.js` 的 `BUSINESS_WARNING_CODES` 只保留已知代碼，新警示碼不會顯示在前台的預覽。
+
+## 2026-11-03 Claude：明細逐行檢核、黃金測試集、刪除測試資料人工步驟
+
+- 新增：`item_line_amount_mismatch`（數量×單價≠金額，容差 1 元）於辨識、`/check-warnings`、`POST /invoices`；ADMIN 以 `items.N.line_amount` 對應到明細格（0 起算，與 422 的 loc 一致），前台 `BUSINESS_WARNING_CODES` 仍不顯示新代碼。
+- 新增：`scripts/golden_eval.py`、`tests/golden/manifest.json`、`tests/unit/test_golden_eval.py`、`docs/GOLDEN_SET.md`、`docs/RUNBOOK_DELETE_TEST_INVOICES.md`。
+- 既有測試調整：`test_preview_items_total_mismatch`、`test_submit_marks_item_changes_by_source_line` 原本只改金額或數量而沒讓乘積一致，現在會觸發新警示，已依實際行為更新期望值並補專屬測試，沒有放寬斷言。
+- 驗證：pytest 通過（見 PR）；ruff、`check_project` 通過。未驗：黃金集對真實 API 的執行、刪除步驟（需人工在正式 DB 執行，AI 未執行）。

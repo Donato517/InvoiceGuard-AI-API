@@ -126,9 +126,38 @@ def test_preview_fixing_total_clears_warning() -> None:
 
 def test_preview_items_total_mismatch() -> None:
     body = valid_body()
-    body["items"][0]["line_amount"] = "5000"
+    body["items"][0].update(quantity="1", unit_price="5000", line_amount="5000")
 
     assert codes(preview_warnings(body, TODAY)) == ["items_total_mismatch"]
+
+
+def test_preview_item_line_amount_must_match_quantity_times_unit_price() -> None:
+    body = valid_body()
+    body["items"][0]["line_amount"] = "5000"  # 2 × 3000 ≠ 5000，且合計也不等於銷售額
+
+    result = preview_warnings(body, TODAY)
+
+    assert [(w.field, w.code) for w in result.warnings] == [
+        ("items.0.line_amount", "item_line_amount_mismatch"),
+        ("items", "items_total_mismatch"),
+    ]
+    assert "第 1 筆" in result.warnings[0].message and "6000" in result.warnings[0].message
+
+
+@pytest.mark.parametrize(
+    "item",
+    [
+        {"quantity": "2", "unit_price": "3000", "line_amount": "6001"},  # 容差 1 元內
+        {"quantity": "2.5", "unit_price": "2400", "line_amount": "6000"},
+        {"unit_price": "3000", "line_amount": "5000"},  # 缺數量：不判斷
+        {"quantity": "2", "unit_price": "abc", "line_amount": "5000"},  # 格式錯誤視為未知
+    ],
+)
+def test_preview_item_line_check_skips_unknown_or_within_tolerance(item: dict[str, str]) -> None:
+    body = valid_body()
+    body["items"][0] = {"item_name": "辦公用品", **item}
+
+    assert "item_line_amount_mismatch" not in codes(preview_warnings(body, TODAY))
 
 
 @pytest.mark.parametrize(

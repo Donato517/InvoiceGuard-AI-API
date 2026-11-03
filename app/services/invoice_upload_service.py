@@ -106,6 +106,7 @@ SUBMITTED_STATUS = "pending_accounting_review"
 SUBMIT_REASON = "手機拍照上傳送出"
 TAX_RATE = Decimal("0.05")
 TAX_TOLERANCE = Decimal("1")
+ITEM_LINE_TOLERANCE = Decimal("1")  # 數量×單價與明細金額的容差（金額四捨五入到元）
 
 _FILE_SIGNATURES = {
     "image/jpeg": b"\xff\xd8\xff",
@@ -404,6 +405,7 @@ def submit(
             total=header.total_amount,
             line_amounts=[item.line_amount for item in items],
             total_zh=header.total_amount_zh,
+            item_details=[(item.quantity, item.unit_price, item.line_amount) for item in items],
         ),
     ]
     try:
@@ -723,6 +725,10 @@ def _build_recognition(
             total=_decimal(amounts["total_amount"]),
             line_amounts=[_decimal(item.line_amount) for item in items],
             total_zh=_text(data.get("total_amount_zh")),
+            item_details=[
+                (_decimal(item.quantity), _decimal(item.unit_price), _decimal(item.line_amount))
+                for item in items
+            ],
         )
     )
     invoice = RecognizedInvoice(
@@ -797,8 +803,12 @@ def _consistency_warnings(
     total: Decimal | None,
     line_amounts: list[Decimal | None],
     total_zh: str | None = None,
+    item_details: list[tuple[Decimal | None, Decimal | None, Decimal | None]] | None = None,
 ) -> list[FieldWarning]:
-    """統編檢查碼、課稅別與稅額、銷售額＋稅額＝總計、國字大寫＝總計、明細合計＝銷售額。"""
+    """統編檢查碼、課稅別與稅額、銷售額＋稅額＝總計、國字大寫＝總計、數量×單價≈明細金額、明細合計＝銷售額。
+
+    item_details 為各明細的（數量，單價，金額），與 line_amounts 同順序；三者齊全的明細才檢核逐行乘積。
+    """
     warnings: list[FieldWarning] = []
     for name, value in (("seller_tax_id", seller_tax_id), ("buyer_tax_id", buyer_tax_id)):
         if value is not None and not valid_tax_id(value):
@@ -852,6 +862,21 @@ def _consistency_warnings(
                     field="total_amount_zh",
                     code="total_amount_zh_mismatch",
                     message=f"國字大寫金額（{zh_value:,}）與總計不符，請確認",
+                )
+            )
+    for index, (quantity, unit_price, amount) in enumerate(item_details or []):
+        if quantity is None or unit_price is None or amount is None:
+            continue
+        expected = quantity * unit_price
+        if abs(expected - amount) > ITEM_LINE_TOLERANCE:
+            warnings.append(
+                FieldWarning(
+                    field=f"items.{index}.line_amount",
+                    code="item_line_amount_mismatch",
+                    message=(
+                        f"第 {index + 1} 筆明細：數量×單價（{canonical_number(expected)}）"
+                        f"與金額（{canonical_number(amount)}）不符，請確認"
+                    ),
                 )
             )
     if (
