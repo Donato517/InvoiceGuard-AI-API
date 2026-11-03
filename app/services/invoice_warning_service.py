@@ -90,6 +90,9 @@ def preview_warnings(body: Mapping[str, Any], today: date | None = None) -> Warn
             tax=_parse_amount(body.get("tax_amount")),
             total=_parse_amount(body.get("total_amount")),
             line_amounts=line_amounts,
+            total_zh=body.get("total_amount_zh")
+            if isinstance(body.get("total_amount_zh"), str)
+            else None,
         ),
     ]
     return WarningCheckRead(warnings=tuple(warnings), checked_on=today)

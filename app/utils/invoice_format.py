@@ -111,8 +111,8 @@ def tax_period_for(value: date) -> str:
     return f"{value.year}{month:02d}"
 
 
-def parse_printed_period(text: str | None) -> str | None:
-    """票面期別轉 YYYYMM：例「一〇八年九、十月份」→ 201910、「115年07-08月」→ 202608。"""
+def _period_year_months(text: str | None) -> tuple[int, list[int]] | None:
+    """票面期別拆成（年，月份清單）：例「一〇八年九、十月份」→ (108, [9, 10])；年份或月份無法判讀回 None。"""
     if not text:
         return None
     value = _number_text(text)
@@ -127,10 +127,95 @@ def parse_printed_period(text: str | None) -> str | None:
     ]
     if year is None or not months or not all(1 <= month <= 12 for month in months):
         return None
+    return year, months
+
+
+def parse_printed_period(text: str | None) -> str | None:
+    """票面期別轉 YYYYMM：例「一〇八年九、十月份」→ 201910、「115年07-08月」→ 202608。"""
+    parsed = _period_year_months(text)
+    if parsed is None:
+        return None
+    year, months = parsed
     try:
         return tax_period_for(date(_to_gregorian_year(year), max(months), 1))
     except ValueError:  # 年份超出範圍（例：99999 年）
         return None
+
+
+def infer_date_from_period(date_text: str | None, period_text: str | None) -> date | None:
+    """票面日期只抄到「月、日」（年份相隔太遠而漏抄）時，以票面期別的年份補上。
+
+    只在日期文字有月與日、期別有年份，且該月份屬於期別的月份時才推算；否則回 None（不猜測）。
+    呼叫端必須提醒使用者「年份由期別推得」，這不是票面直接抄錄的日期。
+    """
+    if not date_text:
+        return None
+    match = re.search(r"(\d{1,2})\D+(\d{1,2})", _number_text(date_text))
+    period = _period_year_months(period_text)
+    if not match or period is None:
+        return None
+    year, months = period
+    month, day = int(match.group(1)), int(match.group(2))
+    if month not in months:
+        return None
+    try:
+        return date(_to_gregorian_year(year), month, day)
+    except ValueError:
+        return None
+
+
+_ZH_AMOUNT_DIGITS = {
+    "零": 0, "〇": 0, "壹": 1, "一": 1, "貳": 2, "二": 2, "兩": 2, "參": 3, "叁": 3, "三": 3,
+    "肆": 4, "四": 4, "伍": 5, "五": 5, "陸": 6, "六": 6, "柒": 7, "七": 7, "捌": 8, "八": 8,
+    "玖": 9, "九": 9, "贰": 2, "陆": 6,
+}  # fmt: skip
+_ZH_AMOUNT_SMALL_UNITS = {"拾": 10, "十": 10, "佰": 100, "百": 100, "仟": 1000, "千": 1000}
+_ZH_AMOUNT_LABELS = re.compile(r"總計|新臺幣|新台幣|[(（]?中[文國]大寫[)）]?|[元圓]?[整正]?$")
+
+
+def chinese_amount_to_int(text: str | None) -> int | None:
+    """票面國字大寫金額轉整數：「壹萬肆仟捌佰伍拾捌元整」→ 14858；無法判讀回 None（不猜測）。
+
+    先去除「總計新臺幣（中文大寫）」等標籤與尾端「元整」。三聯式手開發票的大寫欄預印「億仟佰拾萬仟佰拾元」，
+    數字寫在位名前（「壹拾壹萬」），沒有數字的位名一律視為空位（被劃掉或沒填；實測模型常把劃掉的「拾」抄進開頭，
+    如「拾壹萬捌仟…」實為 18,250），不當成 10；「零」為補位。因此自由書寫的「拾元」（＝10）無法判讀，回 None。
+    出現其他字元、連續兩個數字或沒有任何數字都回 None。
+    """
+    if not text:
+        return None
+    value = _ZH_AMOUNT_LABELS.sub("", "".join(text.split()))
+    if not value:
+        return None
+    total = section = 0
+    number: int | None = None
+    seen_digit = False
+    for char in value:
+        if char in _ZH_AMOUNT_DIGITS:
+            digit = _ZH_AMOUNT_DIGITS[char]
+            seen_digit = True
+            if digit == 0:  # 「零」只是補位（伍仟零伍拾），不產生數字
+                continue
+            if number is not None:
+                return None
+            number = digit
+        elif char in _ZH_AMOUNT_SMALL_UNITS:
+            if number is None:
+                continue  # 空位（被劃掉或沒填的位名）
+            section += number * _ZH_AMOUNT_SMALL_UNITS[char]
+            number = None
+        elif char in "萬万億亿":
+            part = section + (number or 0)
+            if part == 0:
+                continue
+            multiplier = 10_000 if char in "萬万" else 100_000_000
+            if multiplier == 100_000_000:
+                total = (total + part) * multiplier
+            else:
+                total += part * multiplier
+            section, number = 0, None
+        else:
+            return None
+    return total + section + (number or 0) if seen_digit else None
 
 
 def normalize_amount(value: object, places: int = 2) -> str | None:

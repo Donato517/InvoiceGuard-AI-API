@@ -76,6 +76,8 @@ from app.utils.invoice_format import (
     WHITESPACE,
     canonical_digits,
     canonical_number,
+    chinese_amount_to_int,
+    infer_date_from_period,
     invoice_storage_key,
     is_invoice_storage_key,
     normalize_amount,
@@ -143,6 +145,7 @@ _SYSTEM_PROMPT = """你是台灣統一發票的資料抄錄員。輸入是發票
 - 只回傳一個 JSON 物件，不要任何其他文字。
 - 看不到或無法確定的欄位填 null，不可猜測，也不要自行計算。
 - 日期、期別照票面原文抄錄（例如「115年8月15日」「一一五年七、八月份」），不要換算西元。
+- 日期要抄完整的年、月、日，包含「中華民國」後面的年份（例如「114年10月3日」）；年、月、日在票面上相隔很遠時也要合併抄錄。
 - 金額、數量、單價只填數字，不含逗號、元、NT$。
 - 字軌號碼為 2 個英文字母加 8 位數字。
 - 課稅別依票面勾選：應稅 → "taxable"、零稅率 → "zero_rated"、免稅 → "tax_exempt"；看不出勾選填 null。
@@ -400,6 +403,7 @@ def submit(
             tax=header.tax_amount,
             total=header.total_amount,
             line_amounts=[item.line_amount for item in items],
+            total_zh=header.total_amount_zh,
         ),
     ]
     try:
@@ -632,7 +636,21 @@ def _build_recognition(
     printed_period = _text(data.get("tax_period"))
     invoice_date = parse_printed_date(printed_date)
     printed_tax_period = parse_printed_period(printed_period)
+    inferred_date = None
     if invoice_date is None:
+        inferred_date = invoice_date = infer_date_from_period(printed_date, printed_period)
+    if inferred_date is not None:
+        warnings.append(
+            FieldWarning(
+                field="invoice_date",
+                code="invoice_date_year_inferred",
+                message=(
+                    f"票面日期缺少年份，已依票面期別推算為 {inferred_date.isoformat()}，"
+                    "請對照原始發票確認"
+                ),
+            )
+        )
+    elif invoice_date is None:
         warnings.append(
             FieldWarning(
                 field="invoice_date",
@@ -704,6 +722,7 @@ def _build_recognition(
             tax=_decimal(amounts["tax_amount"]),
             total=_decimal(amounts["total_amount"]),
             line_amounts=[_decimal(item.line_amount) for item in items],
+            total_zh=_text(data.get("total_amount_zh")),
         )
     )
     invoice = RecognizedInvoice(
@@ -777,8 +796,9 @@ def _consistency_warnings(
     tax: Decimal | None,
     total: Decimal | None,
     line_amounts: list[Decimal | None],
+    total_zh: str | None = None,
 ) -> list[FieldWarning]:
-    """統編檢查碼、課稅別與稅額、銷售額＋稅額＝總計、明細合計＝銷售額。"""
+    """統編檢查碼、課稅別與稅額、銷售額＋稅額＝總計、國字大寫＝總計、明細合計＝銷售額。"""
     warnings: list[FieldWarning] = []
     for name, value in (("seller_tax_id", seller_tax_id), ("buyer_tax_id", buyer_tax_id)):
         if value is not None and not valid_tax_id(value):
@@ -816,6 +836,24 @@ def _consistency_warnings(
                 message="銷售額＋稅額與總計不符，請確認",
             )
         )
+    if total is not None and total_zh:
+        zh_value = chinese_amount_to_int(total_zh)
+        if zh_value is None:
+            warnings.append(
+                FieldWarning(
+                    field="total_amount_zh",
+                    code="total_amount_zh_unreadable",
+                    message="無法判讀國字大寫金額，請對照票面確認",
+                )
+            )
+        elif Decimal(zh_value) != total:
+            warnings.append(
+                FieldWarning(
+                    field="total_amount_zh",
+                    code="total_amount_zh_mismatch",
+                    message=f"國字大寫金額（{zh_value:,}）與總計不符，請確認",
+                )
+            )
     if (
         sales is not None
         and line_amounts

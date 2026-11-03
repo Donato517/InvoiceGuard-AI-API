@@ -610,6 +610,97 @@ def test_recognize_warns_about_inconsistent_values(services: dict[str, Any]) -> 
     ]
 
 
+def test_recognize_infers_a_missing_year_from_the_printed_period(
+    services: dict[str, Any],
+) -> None:
+    # 實測票面：年份與月日相隔很遠，模型只抄到「10月3」
+    services["model"].replies = [
+        reply(MODEL_JSON | {"invoice_date": "10月3", "tax_period": "一一四年九、十月份"})
+    ]
+
+    body = recognize().json()
+
+    assert body["invoice"]["invoice_date"] == "2025-10-03"
+    assert body["invoice"]["tax_period"] == "202510"
+    assert body["printed"]["invoice_date"] == "10月3"
+    inferred = [w for w in body["warnings"] if w["code"] == "invoice_date_year_inferred"]
+    assert len(inferred) == 1 and "2025-10-03" in inferred[0]["message"]
+    assert all(w["code"] != "invoice_date_invalid" for w in body["warnings"])
+
+
+def test_recognize_does_not_guess_when_the_month_is_outside_the_period(
+    services: dict[str, Any],
+) -> None:
+    services["model"].replies = [
+        reply(MODEL_JSON | {"invoice_date": "8月3", "tax_period": "一一四年九、十月份"})
+    ]
+
+    body = recognize().json()
+
+    assert body["invoice"]["invoice_date"] is None
+    assert any(w["code"] == "invoice_date_invalid" for w in body["warnings"])
+
+
+def test_recognize_warns_when_chinese_amount_differs_from_total(services: dict[str, Any]) -> None:
+    # 讀成 114,858，與總計 6,300 不符
+    services["model"].replies = [
+        reply(MODEL_JSON | {"total_amount_zh": "壹拾壹萬肆仟捌佰伍拾捌元"})
+    ]
+
+    warnings = recognize().json()["warnings"]
+
+    zh = [w for w in warnings if w["code"] == "total_amount_zh_mismatch"]
+    assert len(zh) == 1 and zh[0]["field"] == "total_amount_zh" and "114,858" in zh[0]["message"]
+
+
+def test_recognize_flags_a_real_chinese_amount_misread(services: dict[str, Any]) -> None:
+    # 正式實測樣本 0068：總計 53,223，模型漏抄末位「參」，國字大寫只讀到 53,220
+    services["model"].replies = [
+        reply(
+            MODEL_JSON
+            | {
+                "sales_amount": "50689",
+                "tax_amount": "2534",
+                "total_amount": "53223",
+                "total_amount_zh": "伍萬參仟貳佰贰拾元",
+            }
+        )
+    ]
+
+    warnings = recognize().json()["warnings"]
+
+    zh = [w for w in warnings if w["code"] == "total_amount_zh_mismatch"]
+    assert len(zh) == 1 and "53,220" in zh[0]["message"]
+
+
+def test_recognize_accepts_chinese_amount_with_struck_through_places(
+    services: dict[str, Any],
+) -> None:
+    services["model"].replies = [
+        reply(
+            MODEL_JSON
+            | {
+                "total_amount": "14858",
+                "sales_amount": "14150",
+                "tax_amount": "708",
+                "total_amount_zh": "總計新臺幣(中文大寫)億仟佰拾壹萬肆仟捌佰伍拾捌元",
+            }
+        )
+    ]
+
+    warnings = recognize().json()["warnings"]
+
+    assert not [w for w in warnings if w["code"].startswith("total_amount_zh")]
+
+
+def test_recognize_flags_unreadable_chinese_amount(services: dict[str, Any]) -> None:
+    services["model"].replies = [reply(MODEL_JSON | {"total_amount_zh": "約六千三"})]
+
+    warnings = recognize().json()["warnings"]
+
+    assert any(w["code"] == "total_amount_zh_unreadable" for w in warnings)
+
+
 def test_recognize_cleans_up_expired_unsubmitted_images(services: dict[str, Any]) -> None:
     storage, records = services["storage"], services["records"]
     expired_key = f"{uuid4()}/INVOICES_20261028235959_{uuid4()}.jpg"
@@ -997,6 +1088,55 @@ def test_invoice_storage_key_uses_taipei_time_and_prefix() -> None:
 )
 def test_parse_printed_date(text: str, expected: date | None) -> None:
     assert invoice_format.parse_printed_date(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("壹萬肆仟捌佰伍拾捌元整", 14858),
+        ("拾壹萬肆仟捌佰伍拾捌元", 14858),  # 開頭沒有數字的「拾」是被劃掉的位名
+        ("壹拾壹萬肆仟捌佰伍拾捌元", 114858),
+        # 以下為正式 Document AI 實測（2026-11-03 第二聯扣抵聯樣本）的模型輸出
+        ("拾壹萬捌仟貳佰伍拾零元", 18250),
+        ("億 仟佰 拾貳萬柒仟伍佰貳拾陸元", 27526),
+        ("拾捌萬捌仟玖佰零拾陸元", 88906),
+        ("仟貳佰零拾參萬玖仟陸佰贰拾伍元", 2_039_625),
+        ("億 仟 佰 拾參萬壹仟零佰貳拾貳元", 31022),
+        ("拾壹萬玖仟零佰柒拾陸元", 19076),
+        ("總計新臺幣(中文大寫)億仟佰拾壹萬肆仟捌佰伍拾捌元", 14858),  # 沒有數字的位名視為空位
+        ("陸仟參佰元整", 6300),
+        ("伍仟零伍拾元整", 5050),
+        ("壹仟萬元整", 10_000_000),
+        ("壹億貳仟萬", 120_000_000),
+        ("拾元", None),  # 無數字的位名視為空位，自由書寫的「拾元」無法判讀
+        ("零元", 0),
+        ("壹壹元", None),  # 連續兩個數字
+        ("約六千三", None),
+        ("", None),
+        (None, None),
+    ],
+)
+def test_chinese_amount_to_int(text: str | None, expected: int | None) -> None:
+    assert invoice_format.chinese_amount_to_int(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("date_text", "period_text", "expected"),
+    [
+        ("10月3", "一一四年九、十月份", date(2025, 10, 3)),
+        ("10月3日", "114年9、10月", date(2025, 10, 3)),
+        ("９月１５日", "一一四年九、十月份", date(2025, 9, 15)),
+        ("8月3日", "一一四年九、十月份", None),  # 月份不在期別內：不猜測
+        ("10月32日", "一一四年九、十月份", None),  # 日期不存在
+        ("114年10月", "一一四年九、十月份", None),  # 沒有日
+        ("10月3日", None, None),
+        (None, "一一四年九、十月份", None),
+    ],
+)
+def test_infer_date_from_period(
+    date_text: str | None, period_text: str | None, expected: date | None
+) -> None:
+    assert invoice_format.infer_date_from_period(date_text, period_text) == expected
 
 
 @pytest.mark.parametrize(
