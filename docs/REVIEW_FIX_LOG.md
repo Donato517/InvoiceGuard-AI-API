@@ -507,3 +507,22 @@
 - 新增：`scripts/golden_eval.py`、`tests/golden/manifest.json`、`tests/unit/test_golden_eval.py`、`docs/GOLDEN_SET.md`、`docs/RUNBOOK_DELETE_TEST_INVOICES.md`。
 - 既有測試調整：`test_preview_items_total_mismatch`、`test_submit_marks_item_changes_by_source_line` 原本只改金額或數量而沒讓乘積一致，現在會觸發新警示，已依實際行為更新期望值並補專屬測試，沒有放寬斷言。
 - 驗證：pytest 通過（見 PR）；ruff、`check_project` 通過。未驗：黃金集對真實 API 的執行、刪除步驟（需人工在正式 DB 執行，AI 未執行）。
+
+## 2026-11-03 Claude：重送 Migration 與專屬測試資料庫
+
+- 問題：Migration 的 `_TABLES` 註解含 `"item_id":null`，`op.execute(str)` 會把 `:null` 當成綁定參數；離線 `alembic upgrade --sql` 因 literal_binds 不會發現，線上執行會失敗（交易 rollback）。
+- 處理：移除註解中的「冒號＋名稱」寫法並在檔內註明；整合測試實際以 `upgrade()` 在 PostgreSQL 15 執行才暴露此問題。
+- 另：`engine.raw_connection()` 設為 autocommit 後歸還連線池，會讓後續交易的延遲外鍵立即檢查而失敗；載入基線後已還原 autocommit。
+- 新增：`tests/integration/db_lifecycle.py`、`test_db_lifecycle.py`、`test_history_protection_isolated_db.py`；調整 `conftest.py`（專屬資料庫模式）。
+- 驗證：本機容器 PostgreSQL 15.19，專屬庫模式整合測試 45 passed、1 skipped；舊 `ISOLATED_DB_URL` 模式 27 passed、19 skipped；未設定環境變數時整合測試略過。未驗：正式 DB 結構、Alembic 線上模式（`env.py` 路徑）、CI。
+
+## 2026-11-03 Claude：test-only 基線納入 Repo、Alembic 線上模式驗證
+
+- 新增 `tests/fixtures/sql/`（衍生基線與 README，含來源與指紋）、`tests/integration/test_baseline_fixture.py`、`test_alembic_online_isolated_db.py`；`conftest.py` 在只設 `ISOLATED_ADMIN_URL` 時使用 Repo 內基線；既有資料庫模式清理被歷史表擋下時改為明確失敗訊息。
+- 驗證：本機 PostgreSQL 15.19（啟用 TLS 的一次性容器）整合測試 49 passed、1 skipped；Alembic 線上 `upgrade head`、重複 upgrade、`downgrade base`（僅在一次性專屬庫）、再 upgrade 皆成功；伺服器無 TLS 時略過，設 `ISOLATED_REQUIRE_ALEMBIC_ONLINE=1` 則失敗。
+- 未驗：正式 DB 結構、CI（尚未修改 workflow，僅有提案 `docs/CI_POSTGRES_INTEGRATION_PROPOSAL.md`）。
+
+## 2026-11-03 Claude：CI PostgreSQL 整合測試 Job
+
+- 新增：`.github/workflows/project-checks.yml` 的獨立 `integration` Job（只新增 76 行，既有 `offline` Job 未改）；`db_lifecycle.require_or_skip`（`ISOLATED_REQUIRE_INTEGRATION=1` 時缺設定改為失敗）；`docs/RESUBMIT_ADMIN_INTEGRATION_CHECKLIST.md`。
+- 驗證：本機以相同指令模擬（容器啟用 TLS、僅綁 127.0.0.1）整合測試 50 passed、1 skipped（占位測試）；故意製造失敗（容器無法啟動、無 TLS、基線缺表使 Migration 預檢失敗、必要測試未執行、缺設定）皆讓步驟失敗而非略過。**GitHub Actions 實際執行尚未驗證**。
