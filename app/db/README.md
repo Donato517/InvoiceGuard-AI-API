@@ -203,3 +203,8 @@ alembic downgrade -1 && alembic upgrade head
 
 - 新增欄位：先加為 nullable 或有預設值，後台更新前也不會出錯
 - 刪除 / 改名欄位：先讓後台停止使用並部署，再由本專案 migration 移除
+
+
+## 供應商主檔
+
+新增 migration `5e8b11d0a941` 定義 `public.suppliers`（固定 SQL，未新增 ORM），供 ADMIN 直接存取；正式套用與角色確認步驟見 [供應商結構審查](../../docs/SUPPLIER_SCHEMA.md)。

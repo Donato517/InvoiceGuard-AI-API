@@ -526,3 +526,8 @@
 
 - 新增：`.github/workflows/project-checks.yml` 的獨立 `integration` Job（只新增 76 行，既有 `offline` Job 未改）；`db_lifecycle.require_or_skip`（`ISOLATED_REQUIRE_INTEGRATION=1` 時缺設定改為失敗）；`docs/RESUBMIT_ADMIN_INTEGRATION_CHECKLIST.md`。
 - 驗證：本機以相同指令模擬（容器啟用 TLS、僅綁 127.0.0.1）整合測試 50 passed、1 skipped（占位測試）；故意製造失敗（容器無法啟動、無 TLS、基線缺表使 Migration 預檢失敗、必要測試未執行、缺設定）皆讓步驟失敗而非略過。**GitHub Actions 實際執行尚未驗證**。
+
+
+## 2026-11-04 供應商主檔 migration
+
+補齊正式 ADMIN 所需主檔結構，明確拒絕既有同名表／衝突功能定義；國別＋非空統編唯一、停用保留資料、RLS 與匿名角色拒絕。離線輸出 2 passed；隔離 PostgreSQL 1 skipped，未連正式 DB。執行及 grant 需另依 SUPPLIER_SCHEMA 審查。

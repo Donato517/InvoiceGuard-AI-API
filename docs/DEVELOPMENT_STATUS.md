@@ -60,3 +60,8 @@ AGENTS.md 說明三站架構、閱讀順序與共同約定；README 說明使用
 同案重送 API（2026-11-03，分支 feature/resubmit-core-rules，**尚未 Commit／Push**）：新增 `GET /api/v1/invoices/{id}/return-items`、`POST /api/v1/invoices/{id}/resubmit`（`app/services/invoice_resubmit_service.py`、`app/db/repositories/resubmit_repository.py`、`app/schemas/invoice_resubmit.py`；契約見 `docs/RESUBMIT_API_CONTRACT.md`）。在專屬隔離 PostgreSQL 15 以 TestClient 實際呼叫並回查資料庫（`tests/integration/test_resubmit_api_isolated_db.py`）：欄位補正、純申覆、第 1 輪快照不變且第 2 輪新值、逐筆編輯事件、R1 承接與待重審、冪等重放與並行、查重排除本案、圖片問題優先、非原提交者／未授權欄位／明細結構變更被拒、最後一步失敗全部 rollback。**限制**：退件案件由測試 Fixture 直接寫入；ADMIN 尚未寫入 `invoice_return_items`、前台尚未接上，不是端到端；Migration 尚未在任何共用或正式資料庫執行；申請人自行作廢端點尚未實作；首次送出尚未寫 Round 1 快照。
 
 申請人作廢與針對性覆核（2026-11-03，分支 feature/resubmit-core-rules，**尚未 Commit**）：新增 `POST /api/v1/invoices/{id}/void`（`app/services/invoice_void_service.py`）；重送的欄位覆核改為只針對被退回、實際修改與被申覆的欄位，不再補建其他欄位的待審列，且沒有逐欄確認紀錄就不產生承接。專屬隔離 PostgreSQL 整合測試 86 項通過（含作廢權限、重複作廢、作廢與重送併發、原案件保留、新案件查重）。尚未驗證正式資料庫與 GitHub Actions。
+
+
+## 2026-11-04 供應商 Schema 擴充
+
+新增 migration `5e8b11d0a941`，全公司共用主檔及 suppliers 功能目錄，不新增供應商 API、不修改既有發票 Schema、不自動授予部門權限。離線 migration 測試 2 passed；隔離 PG 測試未配置而略過，正式套用未執行。詳見 [結構審查](SUPPLIER_SCHEMA.md)。
