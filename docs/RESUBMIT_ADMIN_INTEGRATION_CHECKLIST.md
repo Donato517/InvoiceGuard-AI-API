@@ -1,7 +1,7 @@
 # 重送資料結構：ADMIN 跨組整合清單
 
 > 2026-11-03，API 分支 `feature/resubmit-core-rules`（未 Commit）。依據 ADMIN 分支 `feature/applicant-return-flow-db`（`d7b20f9`）的**唯讀**檢查；
-> 沒有修改 ADMIN 任何檔案。Migration `7c1d4e9a2b30` **尚未在任何共用或正式資料庫執行**，以下皆為需與 ADMIN 組員協調的事項，不是已完成的整合。
+> 沒有修改 ADMIN 任何檔案。Migration `7c1d4e9a2b30` 的結構**正式 DB 已於 2026-11-04 以手動 SQL 建立相同結構（Schema v2.1）**，以下皆為需與 ADMIN 組員協調的事項，不是已完成的整合。
 
 ## 先說結論
 
