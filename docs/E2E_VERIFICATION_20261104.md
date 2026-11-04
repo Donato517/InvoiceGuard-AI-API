@@ -19,7 +19,7 @@
 DB 交易失敗：以既有隔離整合測試涵蓋（重送最後一步失敗全部 rollback；首次提交快照寫入失敗整筆回滾、辨識紀錄維持未送出並可重試；`other` 退件的作廢權限維持現行行為，列為待決議（未變更）），未在即時環境注入。
 
 ## 發現的問題
-- P1（已修）main 的 `test_alembic_online_isolated_db.py` 在供應商 Migration 合併後必然失敗（硬編碼 head）。
+- （已由 main 修正）`test_alembic_online_isolated_db.py` 原本硬編碼 head；本 PR 採用 main 的動態 head 版本。
 - P1（已修）`other` 類退回在補正頁不顯示財務原因與限制。
 - 待決議（業務規則未變更）：`other` 類退回與欄位類退回，API 目前都允許原提交者作廢；若只該開放圖片問題需改 `invoice_void_service`。
 - P2：會計科目／扣抵代號只寫入歷程 reason 文字（無專屬欄位）；ADMIN 本機 venv 缺 Pillow 導致 2 項測試無法通過／收集；`ocr_provider` 欄位在 Mock 下仍標示 google_document_ai（程式常數）。
