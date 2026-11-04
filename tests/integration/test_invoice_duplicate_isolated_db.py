@@ -298,27 +298,6 @@ def test_rejected_submit_on_voided_key_never_reactivates_the_old_id(
     assert before["invoices"][0]["status"] == "voided"
 
 
-def test_there_is_no_route_that_can_modify_an_existing_invoice() -> None:
-    """特徵測試：目前沒有任何以 {invoice_id} 寫入的端點，所以 voided 無法被補正重送。
-
-    W2 新增重送端點後，必須以真實的 expected_status 測試取代本測試（見下方被略過的測試）。
-    """
-    from app.main import app
-
-    writers = [
-        (route.path, sorted(route.methods or ()))
-        for route in app.routes
-        if "{invoice_id}" in getattr(route, "path", "")
-        and set(getattr(route, "methods", ()) or ()) & {"POST", "PUT", "PATCH", "DELETE"}
-    ]
-    assert writers == []
-
-
-@pytest.mark.skip(reason="W2：API 尚無補正重送端點；實作時必須驗證 voided 以原 ID 重送被拒（409）")
-def test_voided_case_cannot_be_resubmitted_with_its_original_id() -> None:
-    raise AssertionError("placeholder")
-
-
 def run_concurrently(jobs: list[Callable[[], Any]]) -> list[Any]:
     """讓所有工作在同一時間點開始；回傳每個工作的結果或例外。"""
     barrier = threading.Barrier(len(jobs))

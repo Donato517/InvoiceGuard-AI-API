@@ -35,3 +35,91 @@ jobs:
         run: python -B -m ruff check --no-cache app tests scripts
       - name: Python format
         run: python -B -m ruff format --check app tests scripts
+
+  # PostgreSQL 15 整合測試（獨立 Job，不影響上面的 offline Job）。
+  # 一次性、僅綁回送位址、啟用 TLS 的容器；密碼為本次工作期間產生的臨時值（已遮罩，不輸出）。
+  # 驗證的是 tests/fixtures/sql 的 test-only 基線＋重送 Migration（含 Alembic 線上模式），不是正式資料庫。
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUTF8: "1"
+      APP_ENV: local
+      DEBUG: "false"
+      ISOLATED_REQUIRE_INTEGRATION: "1"
+      ISOLATED_REQUIRE_ALEMBIC_ONLINE: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Start disposable PostgreSQL 15 with TLS (loopback only)
+        run: |
+          set -euo pipefail
+          POSTGRES_PASSWORD="$(openssl rand -hex 24)"
+          echo "::add-mask::${POSTGRES_PASSWORD}"
+          export POSTGRES_PASSWORD
+          echo "ISOLATED_ADMIN_URL=postgresql+psycopg://postgres:${POSTGRES_PASSWORD}@127.0.0.1:55432/postgres" >> "$GITHUB_ENV"
+          docker run -d --name ig-ci-pg -e POSTGRES_PASSWORD -p 127.0.0.1:55432:5432 --entrypoint bash postgres:15 -c \
+            'openssl req -new -x509 -days 1 -nodes -subj /CN=localhost -out /var/lib/postgresql/server.crt -keyout /var/lib/postgresql/server.key 2>/dev/null \
+             && chown postgres:postgres /var/lib/postgresql/server.* && chmod 600 /var/lib/postgresql/server.key \
+             && exec docker-entrypoint.sh postgres -c ssl=on -c ssl_cert_file=/var/lib/postgresql/server.crt -c ssl_key_file=/var/lib/postgresql/server.key' >/dev/null
+          ready=0
+          for _ in $(seq 1 60); do
+            if docker exec ig-ci-pg pg_isready -h 127.0.0.1 -U postgres -q; then ready=1; break; fi
+            sleep 1
+          done
+          if [ "${ready}" != "1" ]; then echo "PostgreSQL did not become ready"; docker logs ig-ci-pg 2>&1 | tail -20; exit 1; fi
+          test "$(docker exec ig-ci-pg psql -h 127.0.0.1 -U postgres -Atc 'SHOW ssl' 2>/dev/null)" = "on" || { echo "TLS is not enabled"; exit 1; }
+          test "$(docker exec ig-ci-pg psql -h 127.0.0.1 -U postgres -Atc 'SHOW server_version_num' | cut -c1-2)" = "15" || { echo "PostgreSQL major version is not 15"; exit 1; }
+      - name: Install existing development dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements-dev.txt
+      - name: PostgreSQL integration tests (dedicated database, Alembic online mode)
+        run: python -B -m pytest tests/integration -q -rs -p no:cacheprovider --junitxml=integration-results.xml
+      - name: Verify required tests actually ran (no silent skips)
+        run: |
+          python -B - <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          ALLOWED_SKIPS: set[str] = set()  # 已實作重送 API，占位測試已移除；任何略過都視為失敗
+          REQUIRED = {
+              "test_alembic_upgrade_runs_online_and_is_reversible_in_a_disposable_database",
+              "test_snapshot_is_immutable_and_blocks_invoice_deletion",
+              "test_return_item_keeps_original_reason_but_accepts_response_and_resolution",
+              "test_carryover_keeps_original_confirmer_and_rejects_invalid_sources",
+              "test_idempotency_key_and_round_can_each_be_used_only_once",
+              "test_two_sessions_only_drop_their_own_database",
+              "test_owner_corrects_authorized_fields_and_new_round_is_saved_in_postgres",
+              "test_pure_appeal_without_changes_creates_a_new_round_and_requires_re_review",
+              "test_same_idempotency_key_replays_the_original_result_without_new_rows",
+              "test_concurrent_identical_requests_create_exactly_one_new_round",
+              "test_image_problem_blocks_resubmit_and_appeal",
+              "test_unauthorized_field_is_rejected_by_backend",
+              "test_voided_case_cannot_be_resubmitted_with_its_original_id",
+              "test_failure_in_the_last_step_leaves_no_partial_formal_submission",
+              "test_confirmation_is_not_carried_over_a_field_that_was_modified_in_a_later_round",
+              "test_owner_voids_an_image_problem_case_and_everything_is_kept",
+              "test_void_and_resubmit_race_has_exactly_one_winner",
+              "test_new_case_after_void_gets_a_new_id_and_old_case_is_untouched",
+          }
+          passed, bad = set(), []
+          for case in ET.parse("integration-results.xml").iter("testcase"):
+              name = case.get("name", "").split("[")[0]
+              if case.find("skipped") is not None:
+                  if name not in ALLOWED_SKIPS:
+                      bad.append(f"unexpected skip: {name}")
+              elif case.find("failure") is not None or case.find("error") is not None:
+                  bad.append(f"failed: {name}")
+              else:
+                  passed.add(name)
+          bad += [f"required test did not pass: {n}" for n in sorted(REQUIRED - passed)]
+          print("\n".join(bad) if bad else f"{len(passed)} distinct tests passed; all required tests ran")
+          sys.exit(1 if bad else 0)
+          PY
+      - name: Remove container
+        if: always()
+        run: docker rm -f ig-ci-pg >/dev/null 2>&1 || true

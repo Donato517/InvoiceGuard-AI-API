@@ -4,6 +4,13 @@
 > v1.8 草案的外鍵整理，**v1.8 草案尚未在正式 DB 執行**，正式 DB 現行為 v1.4：執行前請在 Supabase SQL Editor
 > 先看實際欄位與外鍵（`\d+ public.invoices` 等），與下面不同時以實際為準。
 
+> **2026-11-03 重要限制（重送歷史表）**：Migration `7c1d4e9a2b30` 新增的 `invoice_submission_snapshots`、`invoice_resubmissions`、
+> `invoice_field_review_carryovers`、`invoice_return_items` 是不可變歷史表（禁止 UPDATE／DELETE／TRUNCATE，對 `invoices` 為 RESTRICT）。
+> 該 Migration 套用後，凡是已有這些歷史紀錄的發票，下面的步驟 4 **一定會失敗，這是設計**；**不要**停用 Trigger、`CASCADE`、
+> `session_replication_role` 或 `alembic downgrade` 來繞過。本階段不提供永久刪除有重送歷史的正式資料，使用者要作廢發票只轉換狀態為 `voided`，
+> 正式資料的永久刪除另案做資料治理。本文件的刪除步驟只適用於「尚未套用該 Migration、或確定沒有重送歷史」的人工測試資料，
+> 且仍需人工執行。測試清理請見文末「自動化整合測試的專屬資料庫」。
+
 ## 0. 前置條件
 
 - 有 `postgres` 或等效角色（一般 API 角色受 RLS 與 REVOKE 限制，可能刪不掉或看不全）。
@@ -113,3 +120,31 @@ Supabase Dashboard → Storage → `invoices` bucket → 依步驟 3 留下的 `
 - 不要 `TRUNCATE`、不要沒有 `WHERE` 的 `DELETE`、不要在沒有交易的情況下執行。
 - 不要刪 `user_profiles`、`departments` 等主檔；測試帳號本身若要清除另案處理。
 - 不要用 API 或 ADMIN 的程式去刪：目前沒有核定的刪除端點，也沒有稽核紀錄。
+
+## 自動化整合測試的專屬資料庫（2026-11-03）
+
+自動化整合測試**不使用上面的步驟**，也不連正式或共享資料庫。每個 pytest 工作階段建立自己的資料庫，結束時只刪除它自己建立的庫：
+
+```bash
+export ISOLATED_ADMIN_URL='postgresql+psycopg://<本機帳號>:<密碼>@127.0.0.1:<埠>/postgres'   # 可建立資料庫的本機帳號，主機必須是回送位址
+# 可選：export ISOLATED_BASELINE_SQL='<其他基線 Schema SQL 檔>'；未指定則使用 tests/fixtures/sql 的 test-only 基線（不是正式 Schema，見該目錄 README）
+python -B -m pytest tests/integration
+```
+
+- 資料庫名稱為 `ig_it_` 加 12 位十六進位，建立時在資料庫註解寫入本次工作階段的標記（`invoiceguard-it:<token>`）。
+  刪除前必須名稱格式、註解標記與本次 token 三者都相符，否則拒絕刪除；管理連線不可位於要刪除的庫。不以名稱含 test 判斷，不用萬用字元。
+- 載入基線與 Migration 的 `upgrade()` 是在這個專屬庫內執行；**不要用 `alembic downgrade` 當作清理方式**（它會刪除新表的全部資料，只能用於隔離環境的來回測試）。
+- 向下相容：只設定 `ISOLATED_DB_URL`（已準備好的本機庫）時，測試維持逐筆清理，不建立也不刪除資料庫；需要寫入歷史表的測試會自動略過。**若該庫已套用重送 Migration，而某個測試寫入了歷史表，清理會被保護機制擋下，`world` fixture 會以明確訊息讓測試失敗並留下殘留測試帳號**（不可繞過保護）；請改用專屬資料庫模式，並人工處理那個庫的殘留測試資料。
+- Alembic 線上模式測試需要啟用 TLS 的本機 PostgreSQL（`env.py` 強制 TLS）；伺服器沒有 TLS 時略過，`ISOLATED_REQUIRE_ALEMBIC_ONLINE=1` 則改為失敗。CI 做法見 `docs/CI_POSTGRES_INTEGRATION_PROPOSAL.md`（提案）。
+
+### 測試中斷後的殘留排查
+
+測試程序被強制中止時可能留下 `ig_it_*` 資料庫。**先列出，確認標記，再由人工逐一處理**：
+
+```sql
+SELECT datname, shobj_description(oid, 'pg_database') AS marker
+FROM pg_database WHERE shobj_description(oid, 'pg_database') LIKE 'invoiceguard-it:%';
+```
+
+只有標記為 `invoiceguard-it:` 且確認是自己的、已無人使用的庫才可 `DROP DATABASE "<名稱>"`；名稱像 `ig_t_*` 或其他沒有標記的庫屬於別人的測試資源，不要動。
+清理失敗時 pytest 會失敗並印出庫名，請依本節處理，不要擴大刪除範圍。
