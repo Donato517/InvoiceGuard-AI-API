@@ -208,3 +208,8 @@ alembic downgrade -1 && alembic upgrade head
 ## 供應商主檔
 
 新增 migration `5e8b11d0a941` 定義 `public.suppliers`（固定 SQL，未新增 ORM），供 ADMIN 直接存取；正式套用與角色確認步驟見 [供應商結構審查](../../docs/SUPPLIER_SCHEMA.md)。
+
+
+## 本公司基本資料
+
+新增 migration `8ef487f17b06`（parent `5e8b11d0a941`）定義 `public.company_profile`：固定只有一筆，必填欄位為公司名稱、統一編號（8 碼）、稅籍編號（9 碼），選填負責人、營業地址（郵遞區號、縣市、鄉鎮市區、詳細地址四欄）、主管稽徵機關與申報聯絡窗口（姓名、電話、Email，僅記錄顯示），另有建立／修改者與時間；統編檢查碼由程式驗證。同交易新增功能目錄 `company_profile`（admin），不寫入公司資料、不自動授予部門權限。供 ADMIN「公司基本資料」頁維護，F09 申報檔讀取；取代 F_Schema 建議中的 `COMPANY_BAN`／`COMPANY_TAX_REG_NO` 設定值。正式套用需取得授權並先確認 `alembic_version` 為 `5e8b11d0a941`。
