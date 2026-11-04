@@ -41,7 +41,7 @@ from app.core.exceptions import (
     NotFoundError,
     ServiceUnavailableError,
 )
-from app.db.repositories import invoice_repository, recognition_repository
+from app.db.repositories import invoice_repository, recognition_repository, resubmit_repository
 from app.db.repositories.invoice_repository import (
     FieldChange,
     FieldDifference,
@@ -450,6 +450,17 @@ def submit(
             mime_type=_EXTENSION_TYPES[PurePath(log.source_storage_path).suffix.lstrip(".")],
             size_bytes=source.get("size_bytes"),
             uploaded_by=current.user_id,
+        )
+        _save_first_snapshot(
+            db,
+            invoice_id,
+            header,
+            items,
+            item_ids,
+            warnings,
+            file_id=file_id,
+            submitted_by=current.user_id,
+            submitted_at=submitted_at,
         )
         invoice_repository.insert_field_reviews(
             db,
@@ -893,6 +904,53 @@ def _consistency_warnings(
             )
         )
     return warnings
+
+
+def _save_first_snapshot(
+    db: Session,
+    invoice_id: UUID,
+    header: InvoiceHeader,
+    items: tuple[InvoiceItem, ...],
+    item_ids_by_line: dict[int, UUID],
+    warnings: list[FieldWarning],
+    *,
+    file_id: UUID,
+    submitted_by: UUID,
+    submitted_at: datetime,
+) -> None:
+    """寫入第 1 輪完整提交快照（與重送補建的第 1 輪格式相同）；不提交交易。
+
+    Migration 7c1d4e9a2b30 尚未套用（沒有快照資料表）時略過，讓尚未升級的部署照常提交。
+    資料表存在時，寫入失敗一律向上拋出，由 submit 回滾整筆交易（不留下沒有快照的正式案件）。
+    送出階段沒有新的 Storage 寫入（影像在辨識時已存入並由辨識紀錄參照），所以不需要 Storage 補償；
+    回滾後辨識紀錄維持未送出，影像沿用既有的 1 小時保留與清理。
+    """
+    if not resubmit_repository.snapshot_table_exists(db):
+        return
+    values = {name: getattr(header, name) for name in _HEADER_FIELDS}
+    snapshot_header: dict[str, Any] = {
+        name: _canonical_value(name, value) for name, value in values.items()
+    }
+    snapshot_header["tax_period"] = header.tax_period
+    resubmit_repository.insert_snapshot(
+        db,
+        invoice_id,
+        submission_round=1,
+        kind="first",
+        header=snapshot_header,
+        items=[
+            {
+                "item_id": str(item_ids_by_line[item.line_no]),
+                "line_no": item.line_no,
+                **{name: _canonical_value(name, getattr(item, name)) for name in _ITEM_FIELDS},
+            }
+            for item in items
+        ],
+        validation_results={"warnings": [w.model_dump() for w in warnings]},
+        file_id=file_id,
+        submitted_by=submitted_by,
+        submitted_at=submitted_at,
+    )
 
 
 def _canonical_value(field_name: str, value: object) -> str | None:

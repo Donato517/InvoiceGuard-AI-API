@@ -7,6 +7,7 @@
 
 from decimal import Decimal
 
+import pytest
 from isolated_db import World
 from sqlalchemy import Engine, text
 from sqlalchemy.orm import Session
@@ -20,6 +21,7 @@ from test_invoice_duplicate_isolated_db import (
     submit,
 )
 
+from app.db.repositories import resubmit_repository
 from app.services import invoice_detail_service, invoice_list_service
 from app.services import invoice_upload_service as service
 
@@ -119,3 +121,93 @@ def test_legacy_status_cases_stay_untouched_and_readable(engine: Engine, world: 
     assert [item.invoice_id for item in new_only.items] == [new_id]
     assert legacy_detail.status == LEGACY_STATUS and legacy_detail.submission_round == 1
     assert new_detail.status == FIRST_SUBMIT_STATUS and new_detail.submission_round == 1
+
+
+def _snapshots(engine: Engine, invoice_id: object) -> list[dict[str, object]]:
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                "SELECT submission_round, submission_kind, header, items, file_id, submitted_by"
+                " FROM public.invoice_submission_snapshots WHERE invoice_id = :i"
+            ),
+            {"i": invoice_id},
+        ).mappings()
+        return [dict(row) for row in rows]
+
+
+def test_first_submit_writes_round_one_snapshot_with_header_items_and_image(
+    engine: Engine, world: World
+) -> None:
+    key = new_key()
+    with Session(engine) as db:
+        response = service.submit(
+            db, session_for(world), build_request(make_recognition(world), key)
+        )
+    (snap,) = _snapshots(engine, response.invoice_id)
+    saved = snapshot(engine, response.invoice_id)
+    (stored_file,) = saved["invoice_files"]
+    (item,) = saved["invoice_items"]
+
+    assert (snap["submission_round"], snap["submission_kind"]) == (1, "first")
+    assert snap["file_id"] == stored_file["file_id"]
+    assert snap["submitted_by"] == world.user_id
+    header = snap["header"]
+    assert isinstance(header, dict)
+    assert header["invoice_track"] == key["invoice_track"]
+    assert (header["sales_amount"], header["tax_amount"], header["total_amount"]) == (
+        "1000",
+        "50",
+        "1050",
+    )
+    (snap_item,) = snap["items"]  # type: ignore[misc]
+    assert snap_item["item_id"] == str(item["item_id"]) and snap_item["line_no"] == 1
+
+
+def test_first_submit_without_snapshot_table_still_succeeds(
+    engine: Engine, world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Migration 尚未套用的資料庫：略過快照，其餘資料照常保存。"""
+    monkeypatch.setattr(resubmit_repository, "snapshot_table_exists", lambda db: False)
+    with Session(engine) as db:
+        response = service.submit(
+            db, session_for(world), build_request(make_recognition(world), new_key())
+        )
+    assert response.status == FIRST_SUBMIT_STATUS
+    assert _snapshots(engine, response.invoice_id) == []
+    assert snapshot(engine, response.invoice_id)["invoice_items"]
+
+
+def test_snapshot_failure_rolls_back_the_whole_first_submission(
+    engine: Engine, world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """快照表存在但寫入失敗：不得靜默成功，整筆交易回滾，辨識紀錄維持未送出且可重試。"""
+
+    def boom(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("simulated snapshot failure")
+
+    key = new_key()
+    recognition_id = make_recognition(world)
+    request = build_request(recognition_id, key)
+    monkeypatch.setattr(resubmit_repository, "insert_snapshot", boom)
+    with Session(engine) as db, pytest.raises(RuntimeError):
+        service.submit(db, session_for(world), request)
+
+    with engine.connect() as conn:
+        counts = conn.execute(
+            text(
+                "SELECT (SELECT count(*) FROM public.invoices WHERE submitted_by = :u),"
+                " (SELECT count(*) FROM public.invoice_files f JOIN public.invoices i USING (invoice_id)"
+                "   WHERE i.submitted_by = :u),"
+                " (SELECT count(*) FROM public.invoice_status_history h JOIN public.invoices i USING (invoice_id)"
+                "   WHERE i.submitted_by = :u),"
+                " (SELECT invoice_id FROM public.ai_recognition_logs WHERE recognition_id = :r)"
+            ),
+            {"u": world.user_id, "r": recognition_id},
+        ).one()
+    assert tuple(counts) == (0, 0, 0, None)
+
+    monkeypatch.undo()  # 回復後同一筆辨識可重試成功，且有第 1 輪快照
+    with Session(engine) as db:
+        response = service.submit(db, session_for(world), request)
+    assert response.status == FIRST_SUBMIT_STATUS
+    assert [s["submission_round"] for s in _snapshots(engine, response.invoice_id)] == [1]

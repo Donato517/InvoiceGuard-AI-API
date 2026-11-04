@@ -65,3 +65,5 @@ AGENTS.md 說明三站架構、閱讀順序與共同約定；README 說明使用
 ## 2026-11-04 供應商 Schema 擴充
 
 新增 migration `5e8b11d0a941`，全公司共用主檔及 suppliers 功能目錄，不新增供應商 API、不修改既有發票 Schema、不自動授予部門權限。離線 migration 測試 2 passed；隔離 PG 測試未配置而略過，正式套用未執行。詳見 [結構審查](SUPPLIER_SCHEMA.md)。
+
+首次提交 Round 1 快照與端到端驗證（2026-11-04，分支 feature/e2e-integration-verify，**尚未 Commit**）：`POST /api/v1/invoices` 在同一交易寫入第 1 輪 `invoice_submission_snapshots`（kind=first，內容與重送補建的第 1 輪相同）；Migration 7c1d4e9a2b30 未套用（無快照資料表）時略過，資料表存在時寫入失敗會向上拋出並回滾整筆首次提交（不靜默成功；送出階段無新的 Storage 寫入，影像在辨識時已存入，故不需 Storage 補償，辨識紀錄維持未送出可重試）。整合測試新增 3 項（寫入內容、無資料表略過、寫入失敗整筆回滾並可重試）；隔離 PostgreSQL 整合測試 90 項通過，單元 1227 項通過。`test_alembic_online_isolated_db.py` 原本硬編碼 head 為 7c1d4e9a2b30，供應商 Migration 5e8b11d0a941（刻意禁止 downgrade）合併後在 main 會失敗，已改為「重送 Migration 單獨升降 → 升到 head（確認 suppliers 表已建立）→ 確認 head 禁止回退」。本機隔離端到端（真實前台／ADMIN／API／PostgreSQL 15 TLS，S3 與 OCR 為替身）案例 A–F 結果見 docs/E2E_VERIFICATION_20261104.md；**真實 Document AI 與正式 DB／Migration 仍未驗證**。

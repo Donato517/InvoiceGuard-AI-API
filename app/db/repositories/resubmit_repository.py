@@ -189,6 +189,16 @@ def get_current_file_id(db: Session, invoice_id: UUID) -> UUID | None:
     return db.execute(SELECT_CURRENT_FILE_ID, {"invoice_id": invoice_id}).scalar_one_or_none()
 
 
+SELECT_SNAPSHOT_TABLE = text(
+    "SELECT to_regclass('public.invoice_submission_snapshots') IS NOT NULL"
+)
+
+
+def snapshot_table_exists(db: Session) -> bool:
+    """快照資料表是否已存在（Migration 7c1d4e9a2b30 是否已套用）；唯讀。"""
+    return bool(db.execute(SELECT_SNAPSHOT_TABLE).scalar_one())
+
+
 def snapshot_exists(db: Session, invoice_id: UUID, submission_round: int) -> bool:
     """指定輪次是否已有完整提交快照。"""
     params = {"invoice_id": invoice_id, "submission_round": submission_round}

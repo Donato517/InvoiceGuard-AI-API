@@ -26,7 +26,8 @@ from db_lifecycle import (
 from sqlalchemy import create_engine, text
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-REVISION = "7c1d4e9a2b30"
+REVISION = "7c1d4e9a2b30"  # 重送資料結構（本測試的 4 張新表）
+HEAD = "5e8b11d0a941"  # 目前 head：供應商主檔（2026-11-04，接在 REVISION 之後）
 NEW_TABLES = (
     "invoice_return_items",
     "invoice_submission_snapshots",
@@ -109,18 +110,37 @@ def _state(url: str) -> tuple[str | None, int]:
         engine.dispose()
 
 
+def _table_exists(url: str, name: str) -> bool:
+    engine = create_engine(url)
+    try:
+        with engine.connect() as conn:
+            return (
+                conn.execute(text("SELECT to_regclass(:n)"), {"n": f"public.{name}"}).scalar()
+                is not None
+            )
+    finally:
+        engine.dispose()
+
+
 def test_alembic_upgrade_runs_online_and_is_reversible_in_a_disposable_database(
     baseline_only_database: str,
 ) -> None:
     url = baseline_only_database
     assert _state(url) == (None, 0)
-    result = alembic(url, "upgrade", "head")
-    assert result.returncode == 0, result.stderr[-800:].replace(url, "<url>")
+    # 重送 Migration 單獨升級後可在一次性專屬庫內回退（供應商 Migration 刻意不允許回退）
+    first = alembic(url, "upgrade", REVISION)
+    assert first.returncode == 0, first.stderr[-800:].replace(url, "<url>")
     assert _state(url) == (REVISION, 4)
-    assert alembic(url, "upgrade", "head").returncode == 0  # 已在 head，無動作
-    assert REVISION in alembic(url, "current").stdout
     down = alembic(url, "downgrade", "base")
     assert down.returncode == 0, down.stderr[-800:].replace(url, "<url>")
     assert _state(url) == (None, 0)  # alembic_version 表仍在但已空
-    assert alembic(url, "upgrade", "head").returncode == 0
-    assert _state(url) == (REVISION, 4)
+    result = alembic(url, "upgrade", "head")
+    assert result.returncode == 0, result.stderr[-800:].replace(url, "<url>")
+    assert _state(url) == (HEAD, 4)
+    assert _table_exists(url, "suppliers")  # head 的供應商主檔 Migration 確實已執行
+    assert alembic(url, "upgrade", "head").returncode == 0  # 已在 head，無動作
+    assert HEAD in alembic(url, "current").stdout
+    # 供應商 Migration 保護主檔：從 head 回退必須被拒絕且不改動版本
+    assert alembic(url, "downgrade", "base").returncode != 0
+    assert _state(url) == (HEAD, 4)
+    assert _table_exists(url, "suppliers")  # 被拒絕的回退沒有刪除供應商主檔

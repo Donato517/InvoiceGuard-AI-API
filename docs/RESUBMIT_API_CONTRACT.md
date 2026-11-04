@@ -82,3 +82,7 @@
 - **R1（使用者決定：不恢復逐欄確認）**：重送只對被退回、實際修改的授權相依欄位與被申覆的項目建立待審列；其餘欄位不產生任何覆核紀錄。只有存在真實的已確認覆核列時才寫承接紀錄，沒有逐欄確認紀錄就不會有承接（不產生虛假的已確認狀態）。`invoice_field_review_carryovers` 結構保留，未改 Migration。
 - **申請人作廢**：`POST /api/v1/invoices/{invoice_id}/void`，body `{expected_round, reason?}`；僅原提交者（案件部門＝目前選取部門），其餘 404。只做 `returned_to_applicant → voided` 的條件更新並寫歷程，不刪除或修改案件、影像、辨識與退件歷史，不更動 reviewed_by／reviewed_at。重複作廢或已重送回 409 `INVOICE_NOT_RETURNED`，輪次過期回 409 `RESUBMIT_ROUND_STALE`。與重送競爭時兩者鎖定同一列案件並以條件更新，只有一方成功。作廢後重新上傳走既有 recognize → 首次提交，取得新的 invoice_id，查重不計已作廢案件。
 - 前台補正頁在圖片問題時提供「作廢此案件並重新上傳」，成功後連到既有的手機／電腦上傳頁。
+
+## 2026-11-04 更新：首次送出已寫 Round 1 快照
+
+`POST /api/v1/invoices` 現在同交易寫第 1 輪快照；快照資料表不存在（Migration 未套用）時略過、寫入失敗時整筆首次提交回滾（辨識紀錄維持未送出，可重試）。重送時若第 1 輪快照不存在仍會補建（舊案件與略過情況）。端到端結果見 `E2E_VERIFICATION_20261104.md`。
