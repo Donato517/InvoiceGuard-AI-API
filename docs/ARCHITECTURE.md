@@ -272,7 +272,7 @@ Vercel Function 的檔案系統**只有 `/tmp` 可寫入**，且執行個體結�
 | Production | `main` 分支自動部署 |
 | Preview | 其他分支 / PR 自動部署；環境變數另設，**資料庫使用獨立的測試庫或核定的隔離分支** |
 | Cron | 只在 Production 觸發 |
-| Migration | **不在部署時自動執行**；`alembic upgrade head` 需使用者明確授權，完成後再部署 |
+| Migration | **不在部署時自動執行**；正式 DB 沒有 alembic_version，不以 Alembic 管理：新結構以 migration 檔作為定義，由組長轉成 SQL 在 Supabase 手動執行；`alembic upgrade head` 只用於測試庫 |
 
 ---
 

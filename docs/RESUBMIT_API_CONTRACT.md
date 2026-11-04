@@ -1,6 +1,6 @@
 # 退回重送 API Contract（實作版）
 
-> 2026-11-03，分支 `feature/resubmit-core-rules`（**尚未 Commit／Push／Merge**；Migration `7c1d4e9a2b30` **尚未在任何共用或正式資料庫執行**）。
+> 2026-11-03，分支 `feature/resubmit-core-rules`（**尚未 Commit／Push／Merge**；Migration `7c1d4e9a2b30` 的結構**正式 DB 已於 2026-11-04 以手動 SQL 建立相同結構（Schema v2.1）**）。
 > 以程式為準：`app/routers/v1/invoices.py`、`app/services/invoice_resubmit_service.py`、`app/schemas/invoice_resubmit.py`。
 > 取代 `RESUBMIT_CONTRACT_DRAFT.md`（另一分支）中與 2026-11-03 正式決議衝突的舊規則（R1 全部重來、R4 同案換附件、R9 淨差異）。
 

@@ -6,6 +6,7 @@
 
 > **2026-11-03 重要限制（重送歷史表）**：Migration `7c1d4e9a2b30` 新增的 `invoice_submission_snapshots`、`invoice_resubmissions`、
 > `invoice_field_review_carryovers`、`invoice_return_items` 是不可變歷史表（禁止 UPDATE／DELETE／TRUNCATE，對 `invoices` 為 RESTRICT）。
+> **2026-11-04 起此限制已對正式 DB 生效**：正式 DB 已於 2026-11-04 以手動 SQL 建立相同結構（Schema v2.1，含這四張表與保護 Trigger），下列限制適用於正式資料。
 > 該 Migration 套用後，凡是已有這些歷史紀錄的發票，下面的步驟 4 **一定會失敗，這是設計**；**不要**停用 Trigger、`CASCADE`、
 > `session_replication_role` 或 `alembic downgrade` 來繞過。本階段不提供永久刪除有重送歷史的正式資料，使用者要作廢發票只轉換狀態為 `voided`，
 > 正式資料的永久刪除另案做資料治理。本文件的刪除步驟只適用於「尚未套用該 Migration、或確定沒有重送歷史」的人工測試資料，

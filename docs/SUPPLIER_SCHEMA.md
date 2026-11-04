@@ -19,9 +19,7 @@ ADMIN 直接透過既有 DB Session 使用此結構；API 本次不新增供應�
 啟用 RLS 並撤銷 PUBLIC、anon、authenticated 的表權限；不新增匿名政策。
 正式 runtime DB role 需由維護者確認，ADMIN 不繞過受限 RLS。未啟用前應保持部門無供應商權限。
 
-正式套用需另外確認：資料庫備份、現有 Alembic revision、DDL 執行身分／runtime 身分及要授予哪些部門的四項權限。
-禁止直接 `upgrade head` 帶入其他未核准變更；parent 尚未套用時先停止討論。
-執行需使用者明確授權，本文件與 migration 提交不代表已套用。
+正式 DB 已於 2026-11-04 以手動 SQL 建立相同結構：`suppliers` 與功能目錄 `suppliers` 已建立（Schema v2.0，正式結構以 v2.1 草稿為準）。正式 DB 沒有 alembic_version，不以 Alembic 管理，不需也不能執行本 migration（表已存在會被擋下）；本 migration 只作為結構定義與測試庫使用。部門四項權限由部門管理頁勾選。
 因保護主檔，不提供刪表 downgrade；程式回退時先停用功能目錄，保留資料。
 
 隔離整合測試：`tests/integration/test_supplier_migration_isolated_db.py`，沿用回送位址 fixture，所有本測試 DDL 與主檔資料在交易結束 rollback。

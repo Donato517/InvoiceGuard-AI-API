@@ -67,7 +67,7 @@ START 最後自動開啟當次 HTTPS 的 `/login`，電腦與手機都直接看�
 | `ruff check app tests scripts` / `ruff format app tests scripts` | 程式碼檢查 / 格式化 |
 | `pytest` | 執行測試 |
 | `alembic revision --autogenerate -m "說明"` | 建立 migration 檔（一般開發）；結構需同步 ADMIN Model 與契約快照 |
-| `alembic upgrade head` | 套用 migration：連正式 DB，需使用者明確授權後才執行 |
+| `alembic upgrade head` | 套用 migration（只用於測試庫）。正式 DB 沒有 alembic_version，不以 Alembic 管理，結構由組長轉成 SQL 手動執行 |
 | `python -m scripts.run_job sync_einvoice` | 手動執行排程：job 目前為 stub，會連正式 DB，需使用者授權 |
 
 ## 文件索引
