@@ -7,8 +7,9 @@
 
 from fastapi import APIRouter
 
-from app.routers.v1 import auth, invoices
+from app.routers.v1 import auth, invoices, showcase_references
 
 api_router = APIRouter()
 api_router.include_router(auth.router)
 api_router.include_router(invoices.router)
+api_router.include_router(showcase_references.router)

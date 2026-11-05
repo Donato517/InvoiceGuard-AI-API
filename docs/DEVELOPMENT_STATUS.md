@@ -65,3 +65,10 @@ AGENTS.md 說明三站架構、閱讀順序與共同約定；README 說明使用
 ## 2026-11-04 供應商 Schema 擴充
 
 新增 migration `5e8b11d0a941`，全公司共用主檔及 suppliers 功能目錄，不新增供應商 API、不修改既有發票 Schema、不自動授予部門權限。離線 migration 測試 2 passed；隔離 PG 測試未配置而略過，正式 DB 已於 2026-11-04 以手動 SQL 建立相同結構（Schema v2.0），正式 DB 沒有 alembic_version，不以 Alembic 管理，不需執行本 migration。詳見 [結構審查](SUPPLIER_SCHEMA.md)。
+
+## 2026-11-06 Show Case 交付
+
+原因：上傳核對需要可追溯的供應商範例，但範例不應直接改寫本次發票，也不應另建第二份供應商主檔。
+結論：ADMIN 維護與人工確認、API 提供有效範例、前台另開唯讀參考。新範例綁定正式供應商，原圖與歷程保留；逐次驗權、版本衝突、來源 SHA-256 與失敗回滾由既有分層處理。正式發票換算／檢核流程保留。
+界線：結構版本檔是待 DB 負責人審查的定義，沒有套用正式 migration。正式範例表與私有歷程擴充須依團隊手動 SQL 流程核對；無權限或缺表時拒絕，不以假成功取代。模型比較、真實角色與 Storage、獨立 PostgreSQL 多連線及 Preview 仍待驗收。
+說明見 FEATURE-DELIVERY-20261106.md；提交前的實際驗證結果另補 TEST_REPORT。
