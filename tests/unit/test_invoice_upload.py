@@ -121,9 +121,7 @@ class FakeStorage:
 class FakeGemini:
     """Gemini 替身：依序回傳 replies（ChatReply 或例外）。"""
 
-    replies: list[ChatReply | Exception] = field(
-        default_factory=lambda: [reply(MODEL_JSON)]
-    )
+    replies: list[ChatReply | Exception] = field(default_factory=lambda: [reply(MODEL_JSON)])
     call_details: list[dict[str, Any]] = field(default_factory=list)
     page_count: int = 1
     closed: int = 0
@@ -153,13 +151,15 @@ class FakeGemini:
         prompt: str,
         timeout_seconds: float | None = None,
     ) -> ChatReply:
-        self.call_details.append({
-            "content": content,
-            "mime_type": mime_type,
-            "system_instruction": system_instruction,
-            "prompt": prompt,
-            "timeout_seconds": timeout_seconds,
-        })
+        self.call_details.append(
+            {
+                "content": content,
+                "mime_type": mime_type,
+                "system_instruction": system_instruction,
+                "prompt": prompt,
+                "timeout_seconds": timeout_seconds,
+            }
+        )
         if self.error:
             raise self.error
         result = self.replies.pop(0)
