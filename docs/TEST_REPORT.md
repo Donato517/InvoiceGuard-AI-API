@@ -992,3 +992,12 @@ STARTUP 42 筆清單只在讀取時處理 CRLF 並核對路徑與雜湊，原檔
 ## 2026-10-31 Claude：Storage 模組同步 ADMIN
 
 - `S3StorageClient.get` 新增選填 `timeout_seconds`，預設值不變，新增 test_get_uses_caller_timeout_and_defaults_to_module_timeout。API 全套 1074 passed、14 skipped、1 warning，check_project、ruff check、ruff format --check、git diff --check 皆 exit 0；未連線正式 Storage。
+
+## 2026-11-06 Show Case 交付
+
+原因：上傳核對需要可追溯的供應商範例，但範例不應直接改寫本次發票，也不應另建第二份供應商主檔。
+結論：ADMIN 維護與人工確認、API 提供有效範例、前台另開唯讀參考。新範例綁定正式供應商，原圖與歷程保留；逐次驗權、版本衝突、來源 SHA-256 與失敗回滾由既有分層處理。正式發票換算／檢核流程保留。
+界線：結構版本檔是待 DB 負責人審查的定義，沒有套用正式 migration。正式範例表與私有歷程擴充須依團隊手動 SQL 流程核對；無權限或缺表時拒絕，不以假成功取代。模型比較、真實角色與 Storage、獨立 PostgreSQL 多連線及 Preview 仍待驗收。
+說明見 FEATURE-DELIVERY-20261106.md；提交前的實際驗證結果另補 TEST_REPORT。
+
+交付驗證（2026-11-06）：完整 pytest 1289 passed、85 skipped（356.29 秒），1 個既有 Starlette 警告；check_project --project-root ..、Ruff lint／142 檔格式通過。提示詞兩段與 main 原文完全相同；修改模組的 28 個既有函式／方法定義保留。跳過案例仍未驗收。
