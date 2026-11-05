@@ -14,6 +14,7 @@
     - 只負責呼叫與解析；送出內容的遮罩、知識庫檢索與問答紀錄由上層 service 決定。
 """
 
+import base64
 import re
 from collections.abc import Sequence
 from typing import Any, Literal
@@ -137,6 +138,89 @@ class GeminiClient:
         if not isinstance(data, dict):
             raise GeminiError("gemini_failed", "InvalidJson")
         return _parse_reply(data, self._model)
+
+    def extract_invoice(
+        self,
+        content: bytes,
+        mime_type: str,
+        *,
+        system_instruction: str | None = None,
+        prompt: str,
+        timeout_seconds: float | None = None,
+    ) -> ChatReply:
+        """傳入發票檔案內容（JPG/PNG/PDF）與提示詞，透過 Gemini 多模態結構化擷取資料。
+
+        Args:
+            content: 發票檔案二進位資料。
+            mime_type: 檔案 MIME 類型（例如 image/jpeg、image/png、application/pdf）。
+            system_instruction: 系統指示（若無則為 None）。
+            prompt: 提示詞（包含欄位規格與格式說明）。
+            timeout_seconds: 逾時秒數上限。
+
+        Returns:
+            ChatReply: 模型回覆文字（JSON）、模型名稱、結束原因與 token 用量。
+
+        Raises:
+            GeminiError: 輸入無效、Key 無效、權限或配額不足、內容被擋下、逾時、無法連線或服務錯誤。
+        """
+        if not content or not mime_type or not prompt.strip():
+            raise GeminiError("gemini_invalid_input")
+        if timeout_seconds is not None and timeout_seconds <= 0:
+            raise GeminiError("gemini_timeout")
+        b64_data = base64.b64encode(content).decode("ascii")
+        body: dict[str, Any] = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {
+                            "inlineData": {
+                                "mimeType": mime_type,
+                                "data": b64_data,
+                            }
+                        },
+                        {"text": prompt},
+                    ],
+                }
+            ],
+            "generationConfig": {
+                "responseMimeType": "application/json",
+            },
+        }
+        if system_instruction and system_instruction.strip():
+            body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
+        timeout = (
+            httpx.Timeout(timeout_seconds, connect=min(10.0, timeout_seconds))
+            if timeout_seconds is not None
+            else CHAT_TIMEOUT
+        )
+        try:
+            response = self._http.post(
+                f"{API_BASE}/{self._model}:generateContent",
+                json=body,
+                headers={"x-goog-api-key": self._api_key},
+                timeout=timeout,
+            )
+        except httpx.TimeoutException:
+            raise GeminiError("gemini_timeout") from None
+        except httpx.HTTPError:
+            raise GeminiError("gemini_unreachable") from None
+        if not response.is_success:
+            status, reasons = _google_error(response)
+            raise GeminiError(
+                _error_code(response.status_code, status, reasons), "/".join([status, *reasons])
+            )
+        try:
+            data = response.json()
+        except ValueError:
+            raise GeminiError("gemini_failed", "InvalidJson") from None
+        if not isinstance(data, dict):
+            raise GeminiError("gemini_failed", "InvalidJson")
+        return _parse_reply(data, self._model)
+
+    def close(self) -> None:
+        """關閉底層 HTTP 連線池。"""
+        self._http.close()
 
 
 # Google 錯誤 status 優先於 HTTP 狀態碼：預付額度用完時回 402＋RESOURCE_EXHAUSTED

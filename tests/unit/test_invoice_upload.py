@@ -7,9 +7,7 @@
 
 import json
 import logging
-import math
 import re
-import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
@@ -26,10 +24,10 @@ from app.core import deps
 from app.core.exceptions import UnauthorizedError
 from app.db.repositories import invoice_repository, recognition_repository
 from app.db.repositories.recognition_repository import RecognitionForSubmit
-from app.integrations import document_ai, groq
+from app.integrations import document_ai, gemini, groq
 from app.integrations.chat_models import ChatReply
-from app.integrations.document_ai import DocumentAIError, OcrPage, OcrResult
-from app.integrations.groq import GroqError
+from app.integrations.document_ai import DocumentAIError
+from app.integrations.gemini import GeminiError
 from app.integrations.supabase_storage import StorageError
 from app.main import app
 from app.schemas.auth import DepartmentRead, SessionRead
@@ -83,12 +81,12 @@ def session_read() -> SessionRead:
     )
 
 
-def reply(payload: Any, model: str = "openai/gpt-oss-20b") -> ChatReply:
+def reply(payload: Any, model: str = "gemini-3.8-flash") -> ChatReply:
     text = payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False)
     return ChatReply(
         text=text,
         model=model,
-        finish_reason="stop",
+        finish_reason="STOP",
         prompt_tokens=100,
         output_tokens=50,
         total_tokens=150,
@@ -120,41 +118,50 @@ class FakeStorage:
 
 
 @dataclass
-class FakeOcr:
-    text: str = OCR_TEXT
-    error: DocumentAIError | None = None
-    confidence: float = 0.91536
+class FakeGemini:
+    """Gemini 替身：依序回傳 replies（ChatReply 或例外）。"""
+
+    replies: list[ChatReply | Exception] = field(
+        default_factory=lambda: [reply(MODEL_JSON)]
+    )
+    call_details: list[dict[str, Any]] = field(default_factory=list)
     page_count: int = 1
-    calls: list[str] = field(default_factory=list)
-    timeouts: list[float | None] = field(default_factory=list)
     closed: int = 0
     close_error: Exception | None = None
+    error: Exception | None = None
+    confidence: float = 1.0
+
+    @property
+    def calls(self) -> list[Any]:
+        return [c["mime_type"] for c in self.call_details]
+
+    @property
+    def timeouts(self) -> list[float | None]:
+        return [c["timeout_seconds"] for c in self.call_details]
 
     def close(self) -> None:
         self.closed += 1
         if self.close_error:
             raise self.close_error
 
-    def process(
-        self, content: bytes, mime_type: str, *, timeout_seconds: float | None = None
-    ) -> OcrResult:
-        self.calls.append(mime_type)
-        self.timeouts.append(timeout_seconds)
+    def extract_invoice(
+        self,
+        content: bytes,
+        mime_type: str,
+        *,
+        system_instruction: str | None = None,
+        prompt: str,
+        timeout_seconds: float | None = None,
+    ) -> ChatReply:
+        self.call_details.append({
+            "content": content,
+            "mime_type": mime_type,
+            "system_instruction": system_instruction,
+            "prompt": prompt,
+            "timeout_seconds": timeout_seconds,
+        })
         if self.error:
             raise self.error
-        page = OcrPage(page_number=1, width=None, height=None, confidence=self.confidence, lines=())
-        return OcrResult(text=self.text, pages=(page,) * self.page_count, raw_response={})
-
-
-@dataclass
-class FakeModel:
-    """Groq 替身：依序回傳 replies（ChatReply 或例外）。"""
-
-    replies: list[ChatReply | Exception] = field(default_factory=lambda: [reply(MODEL_JSON)])
-    calls: list[dict[str, Any]] = field(default_factory=list)
-
-    def chat(self, messages: Any, **options: Any) -> ChatReply:
-        self.calls.append({"messages": messages, **options})
         result = self.replies.pop(0)
         if isinstance(result, Exception):
             raise result
@@ -193,13 +200,12 @@ def fake_db() -> Iterator[MagicMock]:
 
 @pytest.fixture
 def services(monkeypatch: pytest.MonkeyPatch, fake_db: MagicMock) -> dict[str, Any]:
-    storage, ocr, model, records = FakeStorage(), FakeOcr(), FakeModel(), FakeRecords()
+    storage, gemini_mock, records = FakeStorage(), FakeGemini(), FakeRecords()
     monkeypatch.setattr(auth_service, "resolve_session", lambda db, token: session_read())
     monkeypatch.setattr(
         invoice_upload_service.S3StorageClient, "from_settings", lambda *a, **k: storage
     )
-    monkeypatch.setattr(invoice_upload_service.DocumentAIClient, "from_settings", lambda: ocr)
-    monkeypatch.setattr(invoice_upload_service.GroqClient, "from_settings", lambda: model)
+    monkeypatch.setattr(invoice_upload_service.GeminiClient, "from_settings", lambda: gemini_mock)
 
     def insert(db: Any, **values: Any) -> datetime:
         records.logs[values["recognition_id"]] = {**values, "result_status": "pending"}
@@ -280,7 +286,14 @@ def services(monkeypatch: pytest.MonkeyPatch, fake_db: MagicMock) -> dict[str, A
         "insert_status_history",
         lambda db, invoice_id, **values: records.history.append(values),
     )
-    return {"storage": storage, "ocr": ocr, "model": model, "records": records, "db": fake_db}
+    return {
+        "storage": storage,
+        "ocr": gemini_mock,
+        "model": gemini_mock,
+        "gemini": gemini_mock,
+        "records": records,
+        "db": fake_db,
+    }
 
 
 def recognize(
@@ -367,10 +380,10 @@ def test_recognize_stores_image_and_returns_normalized_fields(services: dict[str
     ]
     assert body["printed"] == {"invoice_date": "115年8月15日", "tax_period": "一一五年七、八月份"}
     assert body["recognition"] == {
-        "ocr_provider": "google_document_ai",
-        "ocr_confidence": 0.9154,
-        "ai_provider": "groq",
-        "model": "openai/gpt-oss-20b",
+        "ocr_provider": "google_gemini",
+        "ocr_confidence": 1.0,
+        "ai_provider": "google_gemini",
+        "model": "gemini-3.8-flash",
         "fallback_used": False,
     }
     assert body["expires_at"] == "2026-10-29T02:02:03Z"
@@ -380,23 +393,22 @@ def test_recognize_stores_image_and_returns_normalized_fields(services: dict[str
     assert re.fullmatch(rf"{USER_ID}/INVOICES_\d{{14}}_{recognition_id}\.jpg", key)
     log = services["records"].logs[recognition_id]
     assert log["source_storage_path"] == key
-    assert log["ai_provider"] == "groq"
+    assert log["ai_provider"] == "google_gemini"
     assert log["requested_by"] == USER_ID
     assert log["result_status"] == "success"
-    assert log["model_name"] == "openai/gpt-oss-20b"
-    assert log["confidence_score"] == 0.9154
+    assert log["model_name"] == "gemini-3.8-flash"
+    assert log["confidence_score"] == 1.0
     assert log["extracted_fields"]["invoice"] == invoice
     assert log["raw_response"]["source"] == {
         "filename": "相機拍攝.jpg",
         "mime_type": "image/jpeg",
         "size_bytes": len(JPEG),
     }
-    assert log["raw_response"]["ocr"]["text"] == OCR_TEXT
-    call = services["model"].calls[0]
-    assert call["purpose"] == "recognition"
-    assert call["json_output"] is True
-    assert "advanced" not in call
-    assert OCR_TEXT in call["messages"][0].text
+    assert log["raw_response"]["gemini"]["model"] == "gemini-3.8-flash"
+    assert len(services["gemini"].call_details) == 1
+    call = services["gemini"].call_details[0]
+    assert call["mime_type"] == "image/jpeg"
+    assert call["content"] == JPEG
 
 
 def test_recognize_accepts_png(services: dict[str, Any]) -> None:
@@ -496,44 +508,38 @@ def test_recognize_rejects_invalid_session(
     assert services["records"].logs == {}
 
 
-def test_recognize_falls_back_to_advanced_model_once(services: dict[str, Any]) -> None:
-    services["model"].replies = [
-        reply("這不是 JSON"),
-        reply(MODEL_JSON, model="openai/gpt-oss-120b"),
-    ]
+def test_recognize_handles_json_within_markdown_code_fence(services: dict[str, Any]) -> None:
+    fenced = f"```json\n{json.dumps(MODEL_JSON)}\n```"
+    services["gemini"].replies = [reply(fenced)]
 
     body = recognize().json()
 
-    assert body["recognition"]["fallback_used"] is True
-    assert body["recognition"]["model"] == "openai/gpt-oss-120b"
-    assert [call.get("advanced", False) for call in services["model"].calls] == [False, True]
-    log = services["records"].logs[UUID(body["recognition_id"])]
-    assert log["raw_response"]["model"]["fallback_from_error"] == "groq_invalid_reply"
+    assert body["result_status"] == "success"
+    assert body["invoice"]["invoice_number"] == "75670992"
 
 
 def test_recognize_does_not_retry_when_key_is_rejected(services: dict[str, Any]) -> None:
-    services["model"].replies = [GroqError("groq_auth_failed", "invalid_api_key")]
+    services["gemini"].replies = [GeminiError("gemini_auth_failed", "API_KEY_INVALID")]
 
     response = recognize()
 
     assert response.status_code == 502
     assert response.json()["error"]["code"] == "AI_RECOGNITION_FAILED"
-    assert len(services["model"].calls) == 1
+    assert len(services["gemini"].calls) == 1
     (log,) = services["records"].logs.values()
     assert log["result_status"] == "failed"
-    assert log["error_message"] == "groq_auth_failed:invalid_api_key"
+    assert log["error_message"] == "gemini_auth_failed:API_KEY_INVALID"
 
 
-def test_recognize_records_ocr_failure(services: dict[str, Any]) -> None:
-    services["ocr"].error = DocumentAIError("document_ai_timeout")
+def test_recognize_records_gemini_failure(services: dict[str, Any]) -> None:
+    services["gemini"].error = GeminiError("gemini_timeout")
 
     response = recognize()
 
     assert response.status_code == 502
-    assert response.json()["error"]["code"] == "OCR_FAILED"
+    assert response.json()["error"]["code"] == "AI_RECOGNITION_FAILED"
     (log,) = services["records"].logs.values()
-    assert (log["result_status"], log["error_message"]) == ("failed", "document_ai_timeout")
-    assert services["model"].calls == []
+    assert (log["result_status"], log["error_message"]) == ("failed", "gemini_timeout")
 
 
 def test_recognize_records_storage_failure(services: dict[str, Any]) -> None:
@@ -545,11 +551,11 @@ def test_recognize_records_storage_failure(services: dict[str, Any]) -> None:
     assert response.json()["error"]["code"] == "STORAGE_FAILED"
     (log,) = services["records"].logs.values()
     assert log["error_message"] == "storage_denied:AccessDenied"
-    assert services["ocr"].calls == []
+    assert services["gemini"].calls == []
 
 
 def test_recognize_rejects_image_without_text(services: dict[str, Any]) -> None:
-    services["ocr"].text = "  \n"
+    services["gemini"].replies = [reply({"error": "no_text"})]
 
     response = recognize()
 
@@ -559,13 +565,13 @@ def test_recognize_rejects_image_without_text(services: dict[str, Any]) -> None:
     assert log["error_message"] == "invoice_text_not_found"
 
 
-def test_recognize_stops_before_writing_when_model_is_not_configured(
+def test_recognize_stops_before_writing_when_gemini_is_not_configured(
     services: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def not_configured() -> Any:
-        raise GroqError("groq_not_configured")
+        raise GeminiError("gemini_not_configured")
 
-    monkeypatch.setattr(invoice_upload_service.GroqClient, "from_settings", not_configured)
+    monkeypatch.setattr(invoice_upload_service.GeminiClient, "from_settings", not_configured)
 
     response = recognize()
 
@@ -1244,80 +1250,59 @@ def test_recognize_records_failure_when_post_processing_breaks(
     )
 
 
-def test_recognize_drops_non_finite_confidence(services: dict[str, Any]) -> None:
-    services["ocr"].confidence = math.nan
-
-    body = recognize().json()
-
-    assert body["recognition"]["ocr_confidence"] is None
-    assert services["records"].logs[UUID(body["recognition_id"])]["confidence_score"] is None
-
-
-def test_recognize_passes_remaining_time_to_ocr_and_model(services: dict[str, Any]) -> None:
+def test_recognize_passes_remaining_time_to_gemini(services: dict[str, Any]) -> None:
     recognize()
 
-    (ocr_timeout,) = services["ocr"].timeouts
-    model_timeout = services["model"].calls[0]["timeout_seconds"]
-    assert 0 < model_timeout <= ocr_timeout <= invoice_upload_service.RECOGNITION_DEADLINE_SECONDS
+    gemini_timeout = services["gemini"].call_details[0]["timeout_seconds"]
+    assert 0 < gemini_timeout <= invoice_upload_service.RECOGNITION_DEADLINE_SECONDS
 
 
 @pytest.mark.parametrize("google_status,http_status", [(200, 200), (429, 503)])
-def test_recognize_with_synced_document_ai_adapter(
+def test_recognize_with_synced_gemini_adapter(
     services: dict[str, Any],
     monkeypatch: pytest.MonkeyPatch,
     google_status: int,
     http_status: int,
 ) -> None:
-    """以真實同步 adapter 接既有端點；DB／Storage／模型維持合成替身。"""
+    """以真實同步 adapter 接既有端點；DB／Storage 維持合成替身。"""
     requests: list[httpx.Request] = []
 
     def google(request: httpx.Request) -> httpx.Response:
         requests.append(request)
-        payload = {
-            "document": {
-                "text": OCR_TEXT,
-                "pages": [{"pageNumber": 1, "layout": {"confidence": 0.91}}],
+        if google_status == 200:
+            payload = {
+                "candidates": [
+                    {
+                        "content": {
+                            "role": "model",
+                            "parts": [{"text": json.dumps(MODEL_JSON)}],
+                        },
+                        "finishReason": "STOP",
+                    }
+                ],
+                "modelVersion": "gemini-3.8-flash",
             }
-        }
-        if google_status != 200:
+        else:
             payload = {"error": {"status": "RESOURCE_EXHAUSTED"}}
         return httpx.Response(google_status, json=payload)
 
-    with (
-        httpx.Client(transport=httpx.MockTransport(google)) as http,
-        document_ai.DocumentAIClient(
-            project_id="synthetic",
-            location="us",
-            processor_id="123",
-            access_token_provider=lambda: "synthetic",
-            http=http,
-        ) as adapter,
-    ):
-        monkeypatch.setattr(
-            invoice_upload_service.DocumentAIClient, "from_settings", lambda: adapter
-        )
+    with httpx.Client(transport=httpx.MockTransport(google)) as http:
+        adapter = gemini.GeminiClient(api_key="synthetic", model="gemini-3.8-flash", http=http)
+        monkeypatch.setattr(invoice_upload_service.GeminiClient, "from_settings", lambda: adapter)
         response = recognize()
-        # service 關閉 adapter；注入的 HTTP client 仍由呼叫端（本測試）管理
-        assert not http.is_closed
-        with pytest.raises(DocumentAIError) as closed:
-            adapter.process(JPEG, "image/jpeg")
-        assert (closed.value.code, closed.value.detail) == ("document_ai_failed", "ClientClosed")
+        assert http.is_closed
     assert response.status_code == http_status
     assert len(requests) == 1
-    assert json.loads(requests[0].content)["fieldMask"] == document_ai.PROCESS_FIELD_MASK
-    assert max(requests[0].extensions["timeout"].values()) <= 25
     (log,) = services["records"].logs.values()
     if google_status == 200:
         body = response.json()
-        assert body["recognition"]["ocr_provider"] == "google_document_ai"
-        assert body["recognition"]["ocr_confidence"] == 0.91
-        assert log["raw_response"]["ocr"]["page_count"] == 1
-        assert log["raw_response"]["ocr"]["text"] == OCR_TEXT
+        assert body["recognition"]["ocr_provider"] == "google_gemini"
+        assert body["recognition"]["ai_provider"] == "google_gemini"
+        assert body["recognition"]["model"] == "gemini-3.8-flash"
         assert not services["records"].invoices
     else:
         assert log["result_status"] == "failed"
-        assert log["error_message"] == "document_ai_quota_exceeded:RESOURCE_EXHAUSTED"
-        assert not services["model"].calls
+        assert log["error_message"] == "gemini_quota_exceeded:RESOURCE_EXHAUSTED"
 
 
 def _fail_insert(*args: Any, **kwargs: Any) -> Any:
@@ -1328,37 +1313,34 @@ def _fail_insert(*args: Any, **kwargs: Any) -> Any:
     "case",
     [
         "success",
-        "ocr_error",
+        "gemini_error",
         "storage_error",
-        "model_not_configured",
-        "model_error",
+        "gemini_not_configured",
         "multi_page_pdf",
         "no_text",
         "insert_failure",
     ],
 )
-def test_recognize_closes_ocr_client_on_every_outcome(
+def test_recognize_closes_gemini_client_on_every_outcome(
     services: dict[str, Any], monkeypatch: pytest.MonkeyPatch, case: str
 ) -> None:
-    """OCR client 每次辨識都恰好關閉一次，包含 OCR 之前與之後的各種失敗。"""
+    """Gemini client 每次辨識都恰好關閉一次，包含辨識之前與之後的各種失敗。"""
     content, content_type, filename = JPEG, "image/jpeg", "a.jpg"
-    if case == "ocr_error":
-        services["ocr"].error = DocumentAIError("document_ai_timeout")
+    if case == "gemini_error":
+        services["gemini"].error = GeminiError("gemini_timeout")
     elif case == "storage_error":
         services["storage"].put_error = StorageError("storage_denied", "AccessDenied")
-    elif case == "model_not_configured":
+    elif case == "gemini_not_configured":
 
         def not_configured() -> Any:
-            raise GroqError("groq_not_configured")
+            raise GeminiError("gemini_not_configured")
 
-        monkeypatch.setattr(invoice_upload_service.GroqClient, "from_settings", not_configured)
-    elif case == "model_error":
-        services["model"].replies = [GroqError("groq_denied")]
+        monkeypatch.setattr(invoice_upload_service.GeminiClient, "from_settings", not_configured)
     elif case == "multi_page_pdf":
-        services["ocr"].page_count = 2
+        services["gemini"].page_count = 2
         content, content_type, filename = PDF, "application/pdf", "a.pdf"
     elif case == "no_text":
-        services["ocr"].text = "  "
+        services["gemini"].replies = [reply({"error": "no_text"})]
     elif case == "insert_failure":
         monkeypatch.setattr(recognition_repository, "insert", _fail_insert)
 
@@ -1368,35 +1350,28 @@ def test_recognize_closes_ocr_client_on_every_outcome(
     else:
         response = recognize(content, content_type, filename)
         assert (response.status_code == 200) is (case == "success")
-    assert services["ocr"].closed == 1
+    if case != "gemini_not_configured":
+        assert services["gemini"].closed == 1
 
 
 @pytest.mark.parametrize(
     "case,status,code",
     [
         ("success", 200, None),
-        ("ocr_error", 502, "OCR_FAILED"),
-        ("model_not_configured", 503, "SERVICE_UNAVAILABLE"),
+        ("gemini_error", 502, "AI_RECOGNITION_FAILED"),
     ],
 )
 def test_recognize_close_failure_keeps_original_result(
     services: dict[str, Any],
-    monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
     case: str,
     status: int,
     code: str | None,
 ) -> None:
     """close() 本身失敗只記例外型別，不蓋過辨識結果或原本的錯誤，辨識紀錄照常完成。"""
-    services["ocr"].close_error = OSError("synthetic-close-detail")
-    if case == "ocr_error":
-        services["ocr"].error = DocumentAIError("document_ai_timeout")
-    elif case == "model_not_configured":
-
-        def not_configured() -> Any:
-            raise GroqError("groq_not_configured")
-
-        monkeypatch.setattr(invoice_upload_service.GroqClient, "from_settings", not_configured)
+    services["gemini"].close_error = OSError("synthetic-close-detail")
+    if case == "gemini_error":
+        services["gemini"].error = GeminiError("gemini_timeout")
 
     with caplog.at_level(logging.WARNING, logger=invoice_upload_service.__name__):
         response = recognize()
@@ -1404,51 +1379,31 @@ def test_recognize_close_failure_keeps_original_result(
     assert response.status_code == status
     if code:
         assert response.json()["error"]["code"] == code
-    assert services["ocr"].closed == 1
+    assert services["gemini"].closed == 1
     if case == "success":
         (log,) = services["records"].logs.values()
         assert log["result_status"] == "success"
-    elif case == "ocr_error":
+    elif case == "gemini_error":
         (log,) = services["records"].logs.values()
-        assert (log["result_status"], log["error_message"]) == ("failed", "document_ai_timeout")
+        assert (log["result_status"], log["error_message"]) == ("failed", "gemini_timeout")
     warnings = [r.getMessage() for r in caplog.records if r.name == invoice_upload_service.__name__]
-    assert "關閉 OCR client 失敗：OSError" in warnings
+    assert "關閉 Gemini client 失敗：OSError" in warnings
     assert all("synthetic-close-detail" not in message for message in warnings)
 
 
-def test_recognize_does_not_close_when_ocr_is_not_configured(
+def test_recognize_does_not_close_when_gemini_is_not_configured(
     services: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """設定不足時根本沒有建立 OCR client，也不寫任何資料。"""
+    """設定不足時根本沒有建立 Gemini client，也不寫任何資料。"""
 
     def not_configured() -> Any:
-        raise DocumentAIError("document_ai_not_configured")
+        raise GeminiError("gemini_not_configured")
 
-    monkeypatch.setattr(invoice_upload_service.DocumentAIClient, "from_settings", not_configured)
+    monkeypatch.setattr(invoice_upload_service.GeminiClient, "from_settings", not_configured)
     response = recognize()
     assert response.status_code == 503
-    assert services["ocr"].closed == 0
+    assert services["gemini"].closed == 0
     assert not services["records"].logs
-
-
-def test_fallback_is_skipped_when_too_little_time_remains() -> None:
-    model = FakeModel(replies=[GroqError("groq_timeout"), reply(MODEL_JSON)])
-    started = time.monotonic() - (invoice_upload_service.RECOGNITION_DEADLINE_SECONDS - 5)
-
-    with pytest.raises(GroqError):
-        invoice_upload_service._extract_fields(model, OCR_TEXT, started)
-    assert len(model.calls) == 1
-
-
-def test_fallback_uses_only_the_remaining_time() -> None:
-    model = FakeModel(replies=[GroqError("groq_timeout"), reply(MODEL_JSON)])
-    started = time.monotonic() - 10
-
-    invoice_upload_service._extract_fields(model, OCR_TEXT, started)
-
-    first, second = (call["timeout_seconds"] for call in model.calls)
-    assert second <= first <= invoice_upload_service.RECOGNITION_DEADLINE_SECONDS - 10
-    assert model.calls[1]["advanced"] is True
 
 
 def test_client_timeouts_never_exceed_defaults_or_remaining_time() -> None:

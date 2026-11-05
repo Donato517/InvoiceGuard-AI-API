@@ -211,3 +211,51 @@ def test_unexpected_google_error_fields_never_reach_detail(error: dict[str, Any]
         ask(FakeGemini(httpx.Response(429, json={"error": error})))
     assert caught.value.code == "gemini_quota_exceeded"
     assert caught.value.detail in {"HTTP429", "RESOURCE_EXHAUSTED"}
+
+
+def test_extract_invoice_sends_inline_data_and_json_config() -> None:
+    gemini = FakeGemini()
+    client = make_client(gemini)
+    reply = client.extract_invoice(
+        b"fake-image-bytes",
+        "image/jpeg",
+        system_instruction="系統指示",
+        prompt="請整理發票欄位",
+    )
+    (request,) = gemini.requests
+    assert request.headers["x-goog-api-key"] == API_KEY
+    body = json.loads(request.content)
+    assert body["systemInstruction"] == {"parts": [{"text": "系統指示"}]}
+    assert body["generationConfig"] == {"responseMimeType": "application/json"}
+    parts = body["contents"][0]["parts"]
+    assert parts[0]["inlineData"]["mimeType"] == "image/jpeg"
+    assert parts[0]["inlineData"]["data"] == "ZmFrZS1pbWFnZS1ieXRlcw=="
+    assert parts[1]["text"] == "請整理發票欄位"
+    assert reply.text == "三聯式發票每兩個月申報一次。"
+
+
+@pytest.mark.parametrize(
+    ("content", "mime", "prompt"),
+    [
+        (b"", "image/jpeg", "prompt"),
+        (b"data", "", "prompt"),
+        (b"data", "image/jpeg", "  "),
+    ],
+)
+def test_extract_invoice_validates_inputs(content: bytes, mime: str, prompt: str) -> None:
+    client = make_client(FakeGemini())
+    with pytest.raises(GeminiError) as caught:
+        client.extract_invoice(content, mime, prompt=prompt)
+    assert caught.value.code == "gemini_invalid_input"
+
+
+def test_extract_invoice_timeout_zero_raises() -> None:
+    client = make_client(FakeGemini())
+    with pytest.raises(GeminiError) as caught:
+        client.extract_invoice(b"abc", "image/jpeg", prompt="p", timeout_seconds=0.0)
+    assert caught.value.code == "gemini_timeout"
+
+
+def test_client_close() -> None:
+    client = make_client(FakeGemini())
+    client.close()
