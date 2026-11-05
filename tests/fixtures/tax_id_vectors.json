@@ -1,0 +1,140 @@
+{
+  "_comment": "統編檢查碼共用測試向量；API tests/unit/test_tax_id_checksum.py 與前台 tests/js/invoice_field_rules.test.mjs 讀同一份內容，兩邊檔案須保持逐位元組相同。檢查碼通過不代表公司真實存在。",
+  "vectors": [
+    {
+      "tax_id": "04595257",
+      "valid": true,
+      "reason": "S=40，新舊制皆通過"
+    },
+    {
+      "tax_id": "04595252",
+      "valid": true,
+      "reason": "S=35，只有新制（% 5）通過；舊制 % 10 會不通過"
+    },
+    {
+      "tax_id": "10458570",
+      "valid": true,
+      "reason": "S=25，第 7 碼為 7，但由主規則通過"
+    },
+    {
+      "tax_id": "10458574",
+      "valid": true,
+      "reason": "S=29，第 7 碼為 7，由 (S+1)%5 例外通過"
+    },
+    {
+      "tax_id": "10000073",
+      "valid": true,
+      "reason": "S=14，第 7 碼為 7，由 (S+1)%5 例外通過"
+    },
+    {
+      "tax_id": "10000074",
+      "valid": true,
+      "reason": "S=15，第 7 碼為 7，主規則通過"
+    },
+    {
+      "tax_id": "27601907",
+      "valid": true,
+      "reason": "S=30"
+    },
+    {
+      "tax_id": "12345678",
+      "valid": false,
+      "reason": "S=42"
+    },
+    {
+      "tax_id": "10000003",
+      "valid": false,
+      "reason": "S=4，第 7 碼不是 7，例外不適用"
+    },
+    {
+      "tax_id": "10000070",
+      "valid": false,
+      "reason": "S=11，第 7 碼為 7 但 (S+1)%5 != 0"
+    },
+    {
+      "tax_id": "00000000",
+      "valid": true,
+      "reason": "S=0，只代表算式通過，不代表有這家公司"
+    },
+    {
+      "tax_id": "0459525",
+      "valid": false,
+      "reason": "7 碼"
+    },
+    {
+      "tax_id": "045952577",
+      "valid": false,
+      "reason": "9 碼"
+    },
+    {
+      "tax_id": "0459525A",
+      "valid": false,
+      "reason": "含英文字母"
+    },
+    {
+      "tax_id": "0459-525",
+      "valid": false,
+      "reason": "含符號"
+    },
+    {
+      "tax_id": "",
+      "valid": false,
+      "reason": "空字串"
+    },
+    {
+      "tax_id": " 04595257",
+      "valid": false,
+      "reason": "前後空白不在此函式處理"
+    },
+    {
+      "tax_id": "04595257\n",
+      "valid": false,
+      "reason": "結尾換行不通過"
+    },
+    {
+      "tax_id": "０４５９５２５７",
+      "valid": false,
+      "reason": "非 ASCII 數字"
+    },
+    {
+      "tax_id": "０４５９５２５２",
+      "valid": false,
+      "reason": "非 ASCII 數字"
+    },
+    {
+      "tax_id": "１０４５８５７４",
+      "valid": false,
+      "reason": "非 ASCII 數字"
+    },
+    {
+      "tax_id": "٠٤٥٩٥٢٥٧",
+      "valid": false,
+      "reason": "非 ASCII 數字"
+    },
+    {
+      "tax_id": "٠٠٠٠٠٠٠٠",
+      "valid": false,
+      "reason": "非 ASCII 數字"
+    },
+    {
+      "tax_id": "0459５257",
+      "valid": false,
+      "reason": "非 ASCII 數字"
+    },
+    {
+      "tax_id": "0459525٧",
+      "valid": false,
+      "reason": "非 ASCII 數字"
+    },
+    {
+      "tax_id": "00000001",
+      "valid": false,
+      "reason": "S=1"
+    },
+    {
+      "tax_id": "70000000",
+      "valid": false,
+      "reason": "首碼 7，權重 1，S=7"
+    }
+  ]
+}
