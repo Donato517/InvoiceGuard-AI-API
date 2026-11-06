@@ -3,7 +3,7 @@
 from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid5
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 HEADER_FIELDS = (
@@ -148,7 +148,7 @@ def supplier_examples(db: Session, supplier: UUID, page: int) -> list[dict[str, 
     rows = db.execute(
         text(f"""
         {SELECT_EXAMPLE} WHERE e.supplier_id=:supplier
-        ORDER BY e.updated_at DESC,e.example_id LIMIT 20 OFFSET :offset
+        ORDER BY lower(e.example_name),e.example_name,e.example_id LIMIT 20 OFFSET :offset
         """),
         {"supplier": supplier, "offset": (page - 1) * 20},
     ).mappings()
@@ -159,3 +159,17 @@ def supplier_examples(db: Session, supplier: UUID, page: int) -> list[dict[str, 
         }
         for row in rows
     ]
+
+
+def supplier_example_counts(db: Session, suppliers: list[UUID]) -> dict[UUID, int]:
+    """以單次查詢取得本頁供應商的獨立範例張數，不把歷史版本重複計入。"""
+    if not suppliers:
+        return {}
+    rows = db.execute(
+        text(
+            "SELECT supplier_id, count(*) AS total FROM public.supplier_invoice_examples "
+            "WHERE supplier_id IN :ids GROUP BY supplier_id"
+        ).bindparams(bindparam("ids", expanding=True)),
+        {"ids": suppliers},
+    ).mappings()
+    return {row["supplier_id"]: row["total"] for row in rows}
