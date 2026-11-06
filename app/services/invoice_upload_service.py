@@ -17,6 +17,9 @@
     - 使用者修改過的欄位（AI 原值≠送出值，含刪除的 AI 明細）每輪寫一筆 invoice_field_reviews 供審核勾選；
       核對頁的逐次修改（含改了又改回的中間修改）依序寫入 invoice_changes。修改紀錄須從 AI 原值接續到送出值，
       不一致時拒絕送出；有差異卻沒有紀錄的欄位由 API 補一筆。
+    - 送出時在同一交易寫入 Round 1 提交快照（invoice_submission_snapshots，kind=first；表頭與明細的標準值、影像
+      file_id、提交者、送出時間、檢核提醒）。快照資料表不存在、欄位不符或執行角色沒有權限（含 RLS）時不會略過：
+      回 503 INVOICE_SNAPSHOT_UNAVAILABLE 並整筆回滾（不留下發票，辨識紀錄維持未送出，可重試）。
     - 辨識總時限 25 秒（前台請求 30 秒逾時）。
     - 部門功能權限（功能碼）尚未接線：目前 Session 有效即可使用。
 """
@@ -40,7 +43,7 @@ from app.core.exceptions import (
     NotFoundError,
     ServiceUnavailableError,
 )
-from app.db.repositories import invoice_repository, recognition_repository
+from app.db.repositories import invoice_repository, recognition_repository, resubmit_repository
 from app.db.repositories.invoice_repository import (
     FieldChange,
     FieldDifference,
@@ -344,7 +347,7 @@ def submit(
         NotFoundError: 辨識紀錄不存在或不是本人的（RECOGNITION_NOT_FOUND）。
         ConflictError: 已送出、超過 1 小時、辨識未完成或發票重複（INVOICE_DUPLICATED）。
         AppError: 明細來源（INVOICE_ITEMS_INVALID）或修改紀錄（INVOICE_CHANGES_INVALID）與送出內容不一致。
-        ServiceUnavailableError: 資料庫未設定。
+        ServiceUnavailableError: 資料庫未設定，或第 1 輪快照的資料表／權限不可用（INVOICE_SNAPSHOT_UNAVAILABLE）。
     """
     db = _require_db(db)
     header = InvoiceHeader(
@@ -428,6 +431,17 @@ def submit(
             mime_type=_EXTENSION_TYPES[PurePath(log.source_storage_path).suffix.lstrip(".")],
             size_bytes=source.get("size_bytes"),
             uploaded_by=current.user_id,
+        )
+        _save_first_snapshot(
+            db,
+            invoice_id,
+            header,
+            items,
+            item_ids,
+            warnings,
+            file_id=file_id,
+            submitted_by=current.user_id,
+            submitted_at=submitted_at,
         )
         invoice_repository.insert_field_reviews(
             db,
@@ -848,6 +862,65 @@ def _consistency_warnings(
             )
         )
     return warnings
+
+
+def _save_first_snapshot(
+    db: Session,
+    invoice_id: UUID,
+    header: InvoiceHeader,
+    items: tuple[InvoiceItem, ...],
+    item_ids_by_line: dict[int, UUID],
+    warnings: list[FieldWarning],
+    *,
+    file_id: UUID,
+    submitted_by: UUID,
+    submitted_at: datetime,
+) -> None:
+    """在首次送出的同一交易寫入第 1 輪完整提交快照（kind=first）；不 commit。
+
+    格式與重送時補建的第 1 輪快照相同（同一組欄位與標準值），所以重送的 `snapshot_exists` 檢查會略過補建。
+    快照是「送出當下」的值，與 AI 原值（invoice_field_reviews）和逐次修改（invoice_changes）分開保存。
+    不會默默略過：快照資料表不存在、欄位不符或執行角色沒有權限（含 RLS）時，轉成 503
+    INVOICE_SNAPSHOT_UNAVAILABLE 並由 submit 回滾整筆交易（不留下沒有快照的正式案件，辨識紀錄維持未送出）；
+    其他資料庫錯誤原樣拋出，同樣回滾。
+
+    Raises:
+        ServiceUnavailableError: 快照資料結構或權限不可用（INVOICE_SNAPSHOT_UNAVAILABLE）。
+    """
+    snapshot_header: dict[str, Any] = {
+        name: _canonical_value(name, getattr(header, name)) for name in _HEADER_FIELDS
+    }
+    snapshot_header["tax_period"] = header.tax_period
+    try:
+        resubmit_repository.insert_snapshot(
+            db,
+            invoice_id,
+            submission_round=1,
+            kind="first",
+            header=snapshot_header,
+            items=[
+                {
+                    "item_id": str(item_ids_by_line[item.line_no]),
+                    "line_no": item.line_no,
+                    **{name: _canonical_value(name, getattr(item, name)) for name in _ITEM_FIELDS},
+                }
+                for item in items
+            ],
+            validation_results={"warnings": [warning.model_dump() for warning in warnings]},
+            file_id=file_id,
+            submitted_by=submitted_by,
+            submitted_at=submitted_at,
+        )
+    except Exception as error:
+        state = resubmit_repository.snapshot_structure_sqlstate(error)
+        if state is None:
+            raise  # 不是快照結構／權限問題：原樣拋出，由 submit 回滾
+        # 只記錄錯誤類別與 SQLSTATE，不記錄 SQL 參數或發票內容
+        logger.error("首次送出無法寫入第 1 輪快照：sqlstate=%s", state)
+        raise ServiceUnavailableError(
+            "發票服務暫時無法保存提交紀錄，請稍後再試或聯絡系統管理員",
+            code="INVOICE_SNAPSHOT_UNAVAILABLE",
+        ) from None
 
 
 def _canonical_value(field_name: str, value: object) -> str | None:

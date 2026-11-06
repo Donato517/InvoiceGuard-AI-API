@@ -30,7 +30,7 @@
 |---|---|
 | R1 | 重審：被退回欄位＋實際修改的授權相依欄位＋被申覆項目（及其授權欄位）；其餘已確認欄位寫 `invoice_field_review_carryovers`（指向原確認列，前輪不改）。前輪未確認的欄位補一筆待審列，**不因本輪沒有紀錄而推定通過** |
 | R2 | 回到最近一次 `returned_to_applicant` 歷程列的 `old_status`；不在 `pending_department_approval／pending_accounting_review／pending_accounting_approval` 內則 409 |
-| R3 | 每輪完整快照 `invoice_submission_snapshots`（表頭、全部明細、檢核、影像 `file_id` 參照）。**首次送出目前不寫 Round 1 快照**（避免 Migration 未套用的資料庫無法送出）；重送時補建上一輪快照 |
+| R3 | 每輪完整快照 `invoice_submission_snapshots`（表頭、全部明細、檢核、影像 `file_id` 參照）。**首次送出在同一交易寫 Round 1 快照**（快照資料表或權限不可用時回 503 `INVOICE_SNAPSHOT_UNAVAILABLE` 並整筆回滾，不略過）；重送時只對沒有上一輪快照的舊案件補建 |
 | R5 | 僅原提交者；查詢條件含 `submitted_by` 與部門，無權回 404 |
 | R6 | 查重沿用 `lock_invoice_key`＋`exists_duplicate`，**以本案 `invoice_id` 排除**（`exclude_invoice_id` 只由後端傳入，前端不可指定）；已作廢案件不計 |
 | R7 | 先鎖定案件並核對身分 → 冪等重放（相同 key＋內容回原結果；不同內容 409）→ 狀態與 `expected_round`；案件列 `FOR UPDATE` 序列化並行請求；`UNIQUE (invoice_id, from_round)` 兼防同輪重複推進 |
@@ -68,7 +68,7 @@
 ### API 本身尚缺
 
 - 申請人自行作廢端點（目前只有 ADMIN 既有條件更新）。
-- 首次送出寫 Round 1 快照（待 Migration 在目標資料庫確認套用後）。
+- 首次送出寫 Round 1 快照（已實作於分支 feature/first-submit-round1-snapshot，**未 Merge**；部署前須在目標資料庫確認快照表、不可變 Trigger 與執行角色的 INSERT／SELECT 權限及 RLS Policy）。
 
 ## 2026-11-03 後續：ADMIN／前台分支與端到端驗證
 
