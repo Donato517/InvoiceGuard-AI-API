@@ -16,6 +16,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from app.db.repositories.invoice_repository import InvoiceHeader
@@ -187,6 +188,21 @@ def get_return_origin_status(db: Session, invoice_id: UUID) -> str | None:
 def get_current_file_id(db: Session, invoice_id: UUID) -> UUID | None:
     """目前影像檔的 file_id（快照以參照保存，不複製影像）。"""
     return db.execute(SELECT_CURRENT_FILE_ID, {"invoice_id": invoice_id}).scalar_one_or_none()
+
+
+# 快照資料表不存在、欄位不符、權限（含 GRANT／RLS）不足：結構性問題，不是這筆資料的問題
+SNAPSHOT_STRUCTURE_SQLSTATES = frozenset({"42P01", "42703", "42501"})
+
+
+def snapshot_structure_sqlstate(error: Exception) -> str | None:
+    """若 error 是快照資料表不存在（42P01）、欄位不符（42703）或權限／RLS 不足（42501），回傳 SQLSTATE；否則回 None。
+
+    只看 SQLSTATE，不讀取 SQL 或參數，呼叫端可安全記錄回傳值。
+    """
+    if not isinstance(error, DBAPIError):
+        return None
+    state = getattr(error.orig, "sqlstate", None) or getattr(error.orig, "pgcode", None)
+    return state if state in SNAPSHOT_STRUCTURE_SQLSTATES else None
 
 
 def snapshot_exists(db: Session, invoice_id: UUID, submission_round: int) -> bool:
