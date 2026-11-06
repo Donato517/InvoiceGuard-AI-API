@@ -18,6 +18,7 @@ from app.core.deps import BearerToken, OptionalDbSession
 from app.schemas.common import PageNumber, PageSize
 from app.schemas.invoice_detail import InvoiceDetailRead
 from app.schemas.invoice_list import ApprovalStatus, InvoiceListRead
+from app.schemas.invoice_pdf_page import PdfPageClassifyRead
 from app.schemas.invoice_resubmit import (
     InvoiceResubmitRead,
     InvoiceResubmitRequest,
@@ -38,6 +39,7 @@ from app.services import (
     auth_service,
     invoice_detail_service,
     invoice_list_service,
+    invoice_pdf_page_service,
     invoice_required_service,
     invoice_resubmit_service,
     invoice_upload_service,
@@ -61,6 +63,28 @@ def recognize_invoice(
     return invoice_upload_service.recognize(
         db, current, content=content, content_type=file.content_type, filename=file.filename
     )
+
+
+@router.post("/pdf-pages/classify", response_model=PdfPageClassifyRead)
+def classify_pdf_pages(
+    token: BearerToken,
+    db: OptionalDbSession,
+    files: Annotated[
+        list[UploadFile],
+        File(description="PDF 頁面縮圖（JPG／PNG，依頁序，每次 1～9 張，合計 4 MB 以內）"),
+    ],
+) -> PdfPageClassifyRead:
+    """多頁 PDF 找發票頁：判斷每張頁面縮圖是不是三聯式統一發票與聯別；不存檔、不寫入發票資料。"""
+    auth_service.resolve_session(db, token)
+    # 張數超過上限時不讀檔；每張多讀 1 byte 以判斷是否超過上限，不把過大的檔案整個讀進記憶體
+    limit = invoice_pdf_page_service.MAX_PAGES_PER_REQUEST
+    images = [
+        b""
+        if len(files) > limit
+        else upload.file.read(invoice_pdf_page_service.MAX_IMAGE_BYTES + 1)
+        for upload in files
+    ]
+    return invoice_pdf_page_service.classify_pages(images)
 
 
 @router.post("/check-duplicate", response_model=DuplicateCheckRead)
