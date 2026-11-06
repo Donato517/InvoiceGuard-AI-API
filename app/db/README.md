@@ -213,3 +213,7 @@ alembic downgrade -1 && alembic upgrade head
 ## 本公司基本資料
 
 新增 migration `8ef487f17b06`（parent `5e8b11d0a941`）定義 `public.company_profile`：固定只有一筆，必填欄位為公司名稱、統一編號（8 碼）、稅籍編號（9 碼），選填負責人、營業地址（郵遞區號、縣市、鄉鎮市區、詳細地址四欄）、主管稽徵機關與申報聯絡窗口（姓名、電話、Email，僅記錄顯示），另有建立／修改者與時間；統編檢查碼由程式驗證。同交易新增功能目錄 `company_profile`（admin），不寫入公司資料、不自動授予部門權限。供 ADMIN「公司基本資料」頁維護，F09 申報檔讀取；取代 F_Schema 建議中的 `COMPANY_BAN`／`COMPANY_TAX_REG_NO` 設定值。正式 DB 已於 2026-11-04 以手動 SQL 建立相同結構（Schema v2.0），正式 DB 沒有 alembic_version，不以 Alembic 管理，不需也不能執行本 migration；本檔只作為結構定義與測試庫使用。
+
+## Show Case 交付的結構注意事項（2026-11-06）
+
+API 草案 f5e7afb48888 定義私有歷程，4c7c7c1d26b0 對接正式範例並保留既有公司／供應商版本鏈。ADMIN 只使用固定 SQL，未新增本站 migration。正式 DB 沿用團隊手動 SQL 流程；結構檔供審查與隔離測試，沒有執行正式升級。已存在的表需先核對，不能直接重跑 CREATE TABLE。實際角色、私有 Storage 與舊資料映射仍由 DB 負責人確認。
