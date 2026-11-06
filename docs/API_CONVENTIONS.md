@@ -134,6 +134,7 @@ Python `DeleteResult` 是內部服務結果，未來 HTTP DELETE 仍依本文件
 | `AI_RECOGNITION_FAILED` | 502 | 模型無法整理成欄位 JSON（含 120B 備援仍失敗），或回覆內容無法換算 |
 | `RECOGNITION_NOT_FOUND` | 404 | 辨識紀錄不存在或不是本人的 |
 | `RECOGNITION_ALREADY_SUBMITTED` | 409 | 這次辨識已送出過 |
+| `INVOICE_SNAPSHOT_UNAVAILABLE` | 503 | 首次送出無法寫入第 1 輪提交快照（快照資料表不存在、欄位不符或執行角色權限／RLS 不足）；整筆交易已回滾，沒有保存任何資料 |
 | `RECOGNITION_EXPIRED` | 409 | 辨識超過 1 小時或影像已清理，需重新拍攝 |
 | `RECOGNITION_NOT_USABLE` | 409 | 這次辨識未完成或失敗 |
 | `INVOICE_ITEMS_INVALID` | 400 | 明細的 source_line_no 重複或不是這次辨識的 AI 明細 |

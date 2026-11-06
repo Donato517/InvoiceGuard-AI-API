@@ -72,3 +72,12 @@ AGENTS.md 說明三站架構、閱讀順序與共同約定；README 說明使用
 結論：ADMIN 維護與人工確認、API 提供有效範例、前台另開唯讀參考。新範例綁定正式供應商，原圖與歷程保留；逐次驗權、版本衝突、來源 SHA-256 與失敗回滾由既有分層處理。正式發票換算／檢核流程保留。
 界線：結構版本檔是待 DB 負責人審查的定義，沒有套用正式 migration。正式範例表與私有歷程擴充須依團隊手動 SQL 流程核對；無權限或缺表時拒絕，不以假成功取代。模型比較、真實角色與 Storage、獨立 PostgreSQL 多連線及 Preview 仍待驗收。
 說明見 FEATURE-DELIVERY-20261106.md；提交前的實際驗證結果另補 TEST_REPORT。
+
+## 2026-11-06 首次提交 Round 1 快照（分支 feature/first-submit-round1-snapshot，基準 origin/main `8feb847`，**只在功能分支，尚未 Merge main、尚未部署**）
+
+`POST /api/v1/invoices`（`invoice_upload_service.submit()`）在同一交易、`insert_file` 之後呼叫 `_save_first_snapshot`，沿用 `resubmit_repository.insert_snapshot` 與重送補建相同的欄位與標準值寫入第 1 輪快照（kind=first：表頭與明細標準值、`file_id`、提交者、送出時間、檢核提醒）。目的：ADMIN 財務在重送前直接改 `invoices.tax_type`（`UPDATE_TAX_TYPE`，不留 `invoice_changes`）時，重送補建的第 1 輪會是改過的值；首次寫入後第 1 輪保留送出當下的值。**不默默略過**：快照表不存在（42P01）、欄位不符（42703）或權限／RLS 不足（42501）轉成 503 `INVOICE_SNAPSHOT_UNAVAILABLE`（日誌只記 SQLSTATE），`submit` 整筆回滾，辨識紀錄維持未送出可重試；其他資料庫錯誤原樣拋出並回滾。重送流程未改：`snapshot_exists` 為真則不補建，舊案件（沒有第 1 輪）仍補建。
+
+- **資料庫前置需求（部署前必須確認，本分支沒有、也不得由程式自動執行）**：目標資料庫已有 `public.invoice_submission_snapshots`（Migration `7c1d4e9a2b30` 或等價手動 SQL，含 `UNIQUE(invoice_id, submission_round)` 與不可變 Trigger）；API 執行角色對該表有 `INSERT`，且在啟用 RLS 時有允許 INSERT 的 Policy（Migration 對該表 `ENABLE ROW LEVEL SECURITY`＋`REVOKE ALL FROM PUBLIC`）；ADMIN 執行角色對該表有 `SELECT`（跨輪對照）。正式資料庫實際結構與權限**未驗證**（文件宣稱 2026-11-04 已手動建立 Schema v2.1，但同份契約也寫相容性未驗證）。
+- **不可刪除**：快照表禁止 UPDATE／DELETE 且對 `invoices` 為 RESTRICT，此後每一張新提交的發票都不能實體刪除（只能 `voided`）；`RUNBOOK_DELETE_TEST_INVOICES.md` 的刪除步驟對新案件一定失敗。隔離測試的「既有資料庫模式」（`ISOLATED_DB_URL`）清理會失敗，請用專屬資料庫模式（`ISOLATED_ADMIN_URL`）。
+- **未處理（另列後續）**：ADMIN 財務改課稅別仍不寫 `invoice_changes`；快照不含部門與提交當下狀態；ADMIN 跨輪對照（`build_round_diffs`）對「財務改課稅別」會顯示成第 1→2 輪的差異，呈現方式待決議。
+- 測試（2026-11-06，本機一次性 PostgreSQL 15 容器、僅綁 127.0.0.1）：新增 `tests/integration/test_first_submit_snapshot_isolated_db.py`（含缺表、非擁有者非 BYPASSRLS 角色的 GRANT／RLS）與 `tests/unit/test_first_submit_snapshot.py`。**未對正式資料庫或 GitHub Actions 驗證。**
