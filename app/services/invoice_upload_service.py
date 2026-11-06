@@ -65,6 +65,7 @@ from app.schemas.invoice_upload import (
     RecognizedInvoice,
     RecognizedItem,
 )
+from app.services.invoice_few_shot import get_invoice_few_shot_examples
 from app.utils.datetime_utils import now_utc, to_taipei
 from app.utils.invoice_format import (
     INVOICE_BUCKET,
@@ -225,6 +226,7 @@ def recognize(
                 system_instruction=_SYSTEM_PROMPT,
                 prompt=_USER_PROMPT,
                 timeout_seconds=_remaining(started),
+                few_shot_examples=get_invoice_few_shot_examples(),
             )
             data = _parse_reply(reply)
             if data.get("error") == "multipage":

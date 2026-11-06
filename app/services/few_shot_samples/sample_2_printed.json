@@ -1,0 +1,23 @@
+{
+  "is_triplicate": true,
+  "invoice_number": "HP65010301",
+  "invoice_date": "115年1月13日",
+  "tax_period": "一一五年一、二月份",
+  "buyer_name": "虛擬艾錦科技有限公司",
+  "buyer_tax_id": "29141556",
+  "seller_name": "虛擬衡策數據顧問有限公司",
+  "seller_tax_id": "53718208",
+  "items": [
+    {
+      "item_name": "資料盤點",
+      "quantity": "3",
+      "unit_price": "14200",
+      "line_amount": "42600"
+    }
+  ],
+  "sales_amount": "42600",
+  "tax_type": "taxable",
+  "tax_amount": "2130",
+  "total_amount": "44730",
+  "total_amount_zh": "肆萬肆仟柒佰參拾零元"
+}

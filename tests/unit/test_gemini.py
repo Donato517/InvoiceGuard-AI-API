@@ -234,6 +234,51 @@ def test_extract_invoice_sends_inline_data_and_json_config() -> None:
     assert reply.text == "三聯式發票每兩個月申報一次。"
 
 
+def test_extract_invoice_with_few_shot_examples() -> None:
+    gemini = FakeGemini()
+    client = make_client(gemini)
+    reply = client.extract_invoice(
+        b"target-image-bytes",
+        "image/png",
+        prompt="請整理發票欄位",
+        few_shot_examples=[
+            {
+                "content": b"sample1-bytes",
+                "mime_type": "image/jpeg",
+                "reply": {"is_triplicate": True, "invoice_number": "AA11111111"},
+            },
+            {
+                "content": b"sample2-bytes",
+                "mime_type": "image/jpeg",
+                "reply": '{"is_triplicate": true, "invoice_number": "BB22222222"}',
+            },
+        ],
+    )
+    (request,) = gemini.requests
+    body = json.loads(request.content)
+    assert len(body["contents"]) == 5
+    # Turn 1: user exemplar 1
+    assert body["contents"][0]["role"] == "user"
+    assert body["contents"][0]["parts"][0]["inlineData"]["mimeType"] == "image/jpeg"
+    assert body["contents"][0]["parts"][1]["text"] == "請整理發票欄位"
+    # Turn 2: model reply 1
+    assert body["contents"][1]["role"] == "model"
+    assert json.loads(body["contents"][1]["parts"][0]["text"]) == {
+        "is_triplicate": True,
+        "invoice_number": "AA11111111",
+    }
+    # Turn 3: user exemplar 2
+    assert body["contents"][2]["role"] == "user"
+    assert body["contents"][2]["parts"][0]["inlineData"]["mimeType"] == "image/jpeg"
+    # Turn 4: model reply 2
+    assert body["contents"][3]["role"] == "model"
+    assert "BB22222222" in body["contents"][3]["parts"][0]["text"]
+    # Turn 5: target query
+    assert body["contents"][4]["role"] == "user"
+    assert body["contents"][4]["parts"][0]["inlineData"]["mimeType"] == "image/png"
+    assert reply.text == "三聯式發票每兩個月申報一次。"
+
+
 @pytest.mark.parametrize(
     ("content", "mime", "prompt"),
     [

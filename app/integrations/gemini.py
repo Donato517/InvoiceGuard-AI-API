@@ -15,6 +15,7 @@
 """
 
 import base64
+import json
 import re
 from collections.abc import Sequence
 from typing import Any, Literal
@@ -147,6 +148,7 @@ class GeminiClient:
         system_instruction: str | None = None,
         prompt: str,
         timeout_seconds: float | None = None,
+        few_shot_examples: Sequence[dict[str, Any]] | None = None,
     ) -> ChatReply:
         """傳入發票檔案內容（JPG/PNG/PDF）與提示詞，透過 Gemini 多模態結構化擷取資料。
 
@@ -156,6 +158,7 @@ class GeminiClient:
             system_instruction: 系統指示（若無則為 None）。
             prompt: 提示詞（包含欄位規格與格式說明）。
             timeout_seconds: 逾時秒數上限。
+            few_shot_examples: 多模態 Few-Shot 範例清單（各範例包含 content、mime_type、reply 或已建好的對話輪次）。
 
         Returns:
             ChatReply: 模型回覆文字（JSON）、模型名稱、結束原因與 token 用量。
@@ -168,21 +171,61 @@ class GeminiClient:
         if timeout_seconds is not None and timeout_seconds <= 0:
             raise GeminiError("gemini_timeout")
         b64_data = base64.b64encode(content).decode("ascii")
+        contents: list[dict[str, Any]] = []
+        if few_shot_examples:
+            for example in few_shot_examples:
+                if "role" in example and "parts" in example:
+                    contents.append(example)
+                    continue
+                ex_content = example.get("content")
+                ex_mime = example.get("mime_type", "image/jpeg")
+                ex_reply = example.get("reply", "")
+                if isinstance(ex_reply, (dict, list)):
+                    ex_reply = json.dumps(ex_reply, ensure_ascii=False)
+                ex_prompt = example.get("prompt") or prompt
+
+                ex_b64 = (
+                    base64.b64encode(ex_content).decode("ascii")
+                    if isinstance(ex_content, (bytes, bytearray))
+                    else str(ex_content or "")
+                )
+                contents.append(
+                    {
+                        "role": "user",
+                        "parts": [
+                            {
+                                "inlineData": {
+                                    "mimeType": ex_mime,
+                                    "data": ex_b64,
+                                }
+                            },
+                            {"text": ex_prompt},
+                        ],
+                    }
+                )
+                contents.append(
+                    {
+                        "role": "model",
+                        "parts": [{"text": str(ex_reply)}],
+                    }
+                )
+
+        contents.append(
+            {
+                "role": "user",
+                "parts": [
+                    {
+                        "inlineData": {
+                            "mimeType": mime_type,
+                            "data": b64_data,
+                        }
+                    },
+                    {"text": prompt},
+                ],
+            }
+        )
         body: dict[str, Any] = {
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": [
-                        {
-                            "inlineData": {
-                                "mimeType": mime_type,
-                                "data": b64_data,
-                            }
-                        },
-                        {"text": prompt},
-                    ],
-                }
-            ],
+            "contents": contents,
             "generationConfig": {
                 "responseMimeType": "application/json",
             },

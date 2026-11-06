@@ -152,6 +152,7 @@ class FakeGemini:
         system_instruction: str | None = None,
         prompt: str,
         timeout_seconds: float | None = None,
+        few_shot_examples: Any = None,
     ) -> ChatReply:
         self.call_details.append({
             "content": content,
@@ -159,6 +160,7 @@ class FakeGemini:
             "system_instruction": system_instruction,
             "prompt": prompt,
             "timeout_seconds": timeout_seconds,
+            "few_shot_examples": few_shot_examples,
         })
         if self.error:
             raise self.error
@@ -409,6 +411,8 @@ def test_recognize_stores_image_and_returns_normalized_fields(services: dict[str
     call = services["gemini"].call_details[0]
     assert call["mime_type"] == "image/jpeg"
     assert call["content"] == JPEG
+    assert call["few_shot_examples"] is not None
+    assert len(call["few_shot_examples"]) == 2
 
 
 def test_recognize_accepts_png(services: dict[str, Any]) -> None:

@@ -1,0 +1,23 @@
+{
+  "is_triplicate": true,
+  "invoice_number": "GE09299250",
+  "invoice_date": "115年11月3日",
+  "tax_period": "一一五年十一、十二月份",
+  "buyer_name": "采藝室內裝修工程設計有限公司",
+  "buyer_tax_id": "53287735",
+  "seller_name": "儒明工程有限公司",
+  "seller_tax_id": "89308241",
+  "items": [
+    {
+      "item_name": "鐵件工程",
+      "quantity": null,
+      "unit_price": null,
+      "line_amount": "447619"
+    }
+  ],
+  "sales_amount": "447619",
+  "tax_type": "taxable",
+  "tax_amount": "22381",
+  "total_amount": "470000",
+  "total_amount_zh": "肆拾柒萬"
+}
